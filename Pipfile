@@ -1,0 +1,29 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[[source]]
+url = "https://download.pytorch.org/whl/rocm5.2"
+verify_ssl = true
+name = "pytorch"
+
+[packages]
+numpy = "*"
+torch = {version = "==1.13.1", index = "pytorch"}
+pillow = "*"
+opencv-python = "*"
+tqdm = "*"
+torchvision = {version = "==0.14.1", index = "pytorch"}
+numba = "*"
+ipython = "*"
+matplotlib = "*"
+tensorflow = "*"
+
+[dev-packages]
+pyqt6 = "*"
+ipdb = "*"
+
+[requires]
+python_version = "3.10"
+python_full_version = "3.10.13"
