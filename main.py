@@ -98,8 +98,15 @@ def g(conv_filter):
     """
     return np.sum(conv_filter > 0) / conv_filter.size
 
+def print_images(print_filter, shoe_filter, ncc):
+    plt.subplot(1, 3, 1)
+    plt.imshow(print_filter)
+    plt.subplot(1, 3, 2)
+    plt.imshow(shoe_filter)
+    plt.subplot(1, 3, 3)
+    plt.imshow(ncc)
+    plt.show()
 
-# FIXME variable naming too vague
 # TODO Implement cv2 code in numpy and python code, so that this can be parallelised using numba
 def compare(print_filters, shoe_filters, matching_pairs):
     """
@@ -145,8 +152,8 @@ def compare(print_filters, shoe_filters, matching_pairs):
             final_index = 0
             for index in range(n_filters):
                 # Print and shoe filters
-                print_filter = print_[index]
-                shoe_filter = shoe[index]
+                print_filter = print_[index][1:-1, 1:-1]
+                shoe_filter = shoe[index][1:-1, 1:-1]
 
                 # Check that both filters have a ratio of pixels > 0 higher than the threshold T
                 if g(print_filter) > T and g(shoe_filter) > T:
@@ -187,7 +194,6 @@ def compare(print_filters, shoe_filters, matching_pairs):
         # Find the rank of the true match within the sorted array
         # matching_pairs[id+1] because the image id is equal to index + 1
         # Add 1 to the result as the resulting index calculated will be 1 less than the true rank
-        import ipdb; ipdb.set_trace()
         rank = np.where(sorted == (matching_pairs[id+1] -1))[0][0] +1
         rankings.append(rank)
 
