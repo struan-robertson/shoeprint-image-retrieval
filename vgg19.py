@@ -37,6 +37,7 @@ def get_filters(img):
     # Image transforms before passing through network
     transform = transforms.Compose([
         # Convert image from numpy array to tensor
+        # This automatically normalises the image to the range [0, 1]
         transforms.ToTensor(),
         # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
         transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
