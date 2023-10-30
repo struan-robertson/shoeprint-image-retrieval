@@ -116,7 +116,9 @@ def compare(print_filters, shoe_filters, matching_pairs):
     """
     rankings = []
     # Threshold TODO extract hyperparameters into toml file
-    T = 0.2
+    # T = 0.2
+    # T = 0.015
+    T = 0
 
     # Progress bar to measure time taken per shoe
     # TODO use one big progressbar for all shoes, using the description to show what shoe is currently being calculated
