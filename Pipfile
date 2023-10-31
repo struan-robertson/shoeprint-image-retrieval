@@ -19,6 +19,7 @@ numba = "*"
 ipython = "*"
 matplotlib = "*"
 tensorflow = "*"
+joblib = "*"
 
 [dev-packages]
 pyqt6 = "*"
