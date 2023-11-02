@@ -58,6 +58,16 @@ def get_all_filters(images):
     # Return conv filters
     return image_filters
 
+def memory_map(arr):
+    temp_folder = tempfile.mkdtemp()
+    filename = os.path.join(temp_folder, str(uuid.uuid4()))
+    if os.path.exists(filename): os.unlink(filename)
+    _ = dump(arr, filename)
+
+    # TODO load mmaps if already exist?
+    mmap = load(filename, mmap_mode='r')
+
+    return mmap
 
 def initialise_data(data_dir):
     """
@@ -94,6 +104,11 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images)
 
+    print_filters = [memory_map(print_) for print_ in print_filters]
+    shoe_filters = [memory_map(shoe) for shoe in shoe_filters]
+
+    gc.collect()
+
     return (print_filters, shoe_filters, matching_pairs)
 
 
@@ -113,6 +128,7 @@ def print_images(print_filter, shoe_filter, ncc):
     plt.subplot(1, 3, 3)
     plt.imshow(ncc)
     plt.show()
+
 
 def get_similarity(print_, shoe):
     # Number of filters for both shoe and print
@@ -188,7 +204,7 @@ def compare(print_filters, shoe_filters, matching_pairs):
 
         # Loop through each set of shoe filters
         # Try paralell here, each shoe and print is a numpy array and so can be passed in shared memory
-        similarities = Parallel(n_jobs=10, prefer="threads")(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
+        similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
 
         # Sort similarities and then return the indexes in order of the sort
         # np.flip() is required as numpy sorts low -> high
