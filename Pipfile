@@ -24,6 +24,8 @@ joblib = "*"
 [dev-packages]
 pyqt6 = "*"
 ipdb = "*"
+line-profiler = "*"
+rich = "*"
 
 [requires]
 python_version = "3.10"
