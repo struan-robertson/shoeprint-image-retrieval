@@ -182,8 +182,6 @@ def get_similarity(print_, shoe):
         similarity = 0.0
         return(similarity)
 
-
-# TODO Implement cv2 code in numpy and python code, so that this can be parallelised using numba
 def compare(print_filters, shoe_filters, matching_pairs):
     """
     Compare each print to every shoe, generating a probability score.
@@ -191,8 +189,6 @@ def compare(print_filters, shoe_filters, matching_pairs):
     All rankings are then returned.
     """
     rankings = []
-    # Threshold TODO extract hyperparameters into toml file
-    # T = 0.2
 
     # Progress bar to measure time taken per shoe
     pbar = tqdm(total=len(print_filters))
