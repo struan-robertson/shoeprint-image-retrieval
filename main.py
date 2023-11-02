@@ -8,7 +8,13 @@ import cv2
 import matplotlib.pyplot as plt
 
 from numba import njit
-from joblib import Parallel, delayed
+
+from joblib import Parallel, delayed, load, dump
+import tempfile
+import uuid
+import gc
+
+# from line_profiler import profile
 
 # Uses PyTorch
 # from vgg19 import get_filters
@@ -128,7 +134,7 @@ def get_similarity(print_, shoe):
     ncc_array = np.empty((n_filters, y, x), dtype=np.float32)
 
     # Index of ncc_array to insert new values into
-    final_index = 0
+    # final_index = 0
     for index in range(n_filters):
 
 
@@ -141,13 +147,11 @@ def get_similarity(print_, shoe):
 
         # Calculate NCC map, slicing result to match the same size as the input shoe filter
         # The slicing is required in cases where the padding is an even number
-        ncc_array[final_index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
+        ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
 
-        # Increase final index
-        final_index += 1
 
     # Slice ncc_array to only include computed NCC maps
-    ncc_array = ncc_array[:final_index]
+    # ncc_array = ncc_array[:final_index]
 
     # number of NCC maps computed
     k = ncc_array.shape[0]
@@ -175,7 +179,6 @@ def compare(print_filters, shoe_filters, matching_pairs):
     # T = 0.2
 
     # Progress bar to measure time taken per shoe
-    # TODO use one big progressbar for all shoes, using the description to show what shoe is currently being calculated
     pbar = tqdm(total=len(print_filters))
 
     # Loop through each set of print filters
