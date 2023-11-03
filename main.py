@@ -24,7 +24,9 @@ from Networks.vgg19_tf import get_filters
 
 # ------ Similarity Measures ------
 
-from Similarities.ncc import get_similarity
+# from Similarities.ncc import get_similarity
+
+from Similarities.orb import get_similarity
 
 def load_images(dir):
     """
@@ -62,17 +64,17 @@ def get_all_filters(images):
     # Return conv filters
     return image_filters
 
-def memory_map(arr):
-    temp_folder = tempfile.mkdtemp()
-    filename = os.path.join(temp_folder, str(uuid.uuid4()))
+def memory_map(arr, name):
+    folder = "Memmaps"
+    filename = os.path.join(folder, name)
     if os.path.exists(filename): os.unlink(filename)
     _ = dump(arr, filename)
 
-    # TODO load mmaps if already exist?
     mmap = load(filename, mmap_mode='r')
 
     return mmap
 
+# TODO load mmaps if already exist?
 def initialise_data(data_dir):
     """
     Load all required state for testing.
@@ -108,8 +110,8 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images)
 
-    print_filters = [memory_map(print_) for print_ in print_filters]
-    shoe_filters = [memory_map(shoe) for shoe in shoe_filters]
+    print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
+    shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
 
     gc.collect()
 
@@ -119,7 +121,7 @@ def write_csv(filename, rankings):
     with open(f'Results/{filename}', 'w', newline='') as file:
         writer = csv.writer(file)
         for rank in rankings:
-            writer.writerow(rank)
+            writer.writerow([rank])
 
 def compare(print_filters, shoe_filters, matching_pairs):
     """
