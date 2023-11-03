@@ -3,6 +3,7 @@
 from numba import njit
 import numpy as np
 import matplotlib.pyplot as plt
+import cv2
 
 def print_images(print_filter, shoe_filter, ncc):
     plt.subplot(1, 3, 1)
