@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 vgg19 = models.vgg19(weights="VGG19_Weights.DEFAULT")
 # vgg19_subset = list(vgg19.features.children())[:23]
 # TODO check that this is a ReLu layer
-vgg19_subset = list(vgg19.features.children())[:25]
+vgg19_subset = list(vgg19.features.children())[:23]
 
 # Check if a GPU is available and if not, use a CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
