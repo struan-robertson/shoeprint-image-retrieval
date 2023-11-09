@@ -24,9 +24,9 @@ from Networks.vgg19_tf import get_filters
 
 # ------ Similarity Measures ------
 
-# from Similarities.ncc import get_similarity
+from Similarities.ncc import get_similarity
 
-from Similarities.orb import get_similarity
+# from Similarities.orb import get_similarity
 
 def load_images(dir):
     """
