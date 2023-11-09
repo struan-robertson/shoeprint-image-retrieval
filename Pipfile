@@ -12,7 +12,6 @@ name = "pytorch"
 numpy = "*"
 torch = {version = "==1.13.1", index = "pytorch"}
 pillow = "*"
-opencv-python = "*"
 tqdm = "*"
 torchvision = {version = "==0.14.1", index = "pytorch"}
 numba = "*"
@@ -20,6 +19,8 @@ ipython = "*"
 matplotlib = "*"
 tensorflow = "*"
 joblib = "*"
+opencv-python = "*"
+scipy = "*"
 
 [dev-packages]
 pyqt6 = "*"
