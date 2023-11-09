@@ -9,6 +9,9 @@ import torchvision.transforms as transforms
 
 from matplotlib import pyplot as plt
 
+# TODO only have seperate network files for TF/Pytorch
+# Networks themselves should be picked using a function
+
 # Create subset model from first 14 layers of pre-trained VGG19
 vgg19 = models.vgg19(weights="VGG19_Weights.DEFAULT")
 # vgg19_subset = list(vgg19.features.children())[:23]

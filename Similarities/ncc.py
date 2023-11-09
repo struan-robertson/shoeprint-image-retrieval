@@ -4,6 +4,7 @@ from numba import njit
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from scipy.signal import fftconvolve
 
 def print_images(print_filter, shoe_filter, ncc):
     plt.subplot(1, 3, 1)
@@ -22,6 +23,43 @@ def g(conv_filter):
     """
     return np.sum(conv_filter > 0) / conv_filter.size
 
+
+def normxclorr2(template, image, mode="full"):
+    """
+    https://github.com/Sabrewarrior/normxcorr2-python/blob/master/normxcorr2.py
+    Input arrays should be floating point numbers.
+    :param template: N-D array, of template or filter you are using for cross-correlation.
+    Must be less or equal dimensions to image.
+    Length of each dimension must be less than length of image.
+    :param image: N-D array
+    :param mode: Options, "full", "valid", "same"
+    full (Default): The output of fftconvolve is the full discrete linear convolution of the inputs.
+    Output size will be image size + 1/2 template size in each dimension.
+    valid: The output consists only of those elements that do not rely on the zero-padding.
+    same: The output is the same size as image, centered with respect to the ‘full’ output.
+    :return: N-D array of same dimensions as image. Size depends on mode parameter.
+    """
+    template = template - np.mean(template)
+    image = image - np.mean(image)
+
+    a1 = np.ones(template.shape)
+    # Faster to flip up down and left right then use fftconvolve instead of scipy's correlate
+    ar = np.flipud(np.fliplr(template))
+    out = fftconvolve(image, ar.conj(), mode=mode)
+
+    image = fftconvolve(np.square(image), a1, mode=mode) - \
+            np.square(fftconvolve(image, a1, mode=mode)) / (np.prod(template.shape))
+
+    # Remove small machine precision errors after subtraction
+    image[np.where(image < 0)] = 0
+
+    template = np.sum(np.square(template))
+    out = out / np.sqrt(image * template )
+    # Remove any divisions by 0 or very close to 0
+    out[np.where(np.logical_not(np.isfinite(out)))] = 0
+
+    return out
+
 def get_similarity(print_, shoe):
     # Number of filters for both shoe and print
     n_filters = len(shoe)
@@ -39,23 +77,25 @@ def get_similarity(print_, shoe):
     x = image_dims[1]
 
     # Array to hold computed normalised cross correlation maps
-    ncc_array = np.empty((n_filters, y, x), dtype=np.float32)
+    ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
 
     # Index of ncc_array to insert new values into
     # final_index = 0
     for index in range(n_filters):
 
-
-        # Print and shoe filters
+        # Remove outer pixel artefacts from prinat and shoe filter
         print_filter = print_[index][1:-1, 1:-1]
         shoe_filter = shoe[index][1:-1, 1:-1]
 
         # Pad shoe filter to allow for template matching of every pixel
-        padded_target = cv2.copyMakeBorder(shoe_filter, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=(0,))
+        # padded_target = cv2.copyMakeBorder(shoe_filter, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=(0,))
 
         # Calculate NCC map, slicing result to match the same size as the input shoe filter
         # The slicing is required in cases where the padding is an even number
-        ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
+        # ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
+        ncc_array[index] = normxclorr2(print_filter, shoe_filter, 'same')
+        # import ipdb; ipdb.set_trace()
+
 
 
     # Slice ncc_array to only include computed NCC maps
