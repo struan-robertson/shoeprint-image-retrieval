@@ -2,6 +2,7 @@
 import os
 from PIL import Image
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
 import csv
 from tqdm import tqdm
 
@@ -139,10 +140,10 @@ def compare(print_filters, shoe_filters, matching_pairs):
 
         # Loop through each set of shoe filters
         # Try paralell here, each shoe and print is a numpy array and so can be passed in shared memory
-        # similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
+        similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
 
-        for shoe in tqdm(shoe_filters):
-            get_similarity(print_, shoe)
+        # for shoe in tqdm(shoe_filters):
+        #     get_similarity(print_, shoe)
 
         # Sort similarities and then return the indexes in order of the sort
         # np.flip() is required as numpy sorts low -> high

@@ -2,6 +2,7 @@
 
 import tensorflow as tf
 from tensorflow.keras.applications import VGG19
+from tensorflow.keras.applications.vgg16 import preprocess_input
 from tensorflow.keras.models import Model
 import cv2
 import numpy as np
@@ -38,14 +39,24 @@ def get_filters(img):
     img = clahe.apply(img)
 
     # Normalize the image to be in the range [0, 1]
-    img = img.astype('float32') / 255.0
+    # img = img.astype('float32') / 255.0
 
     # Add batch dimension and repeat the image across channels
-    input_batch = np.repeat(img[np.newaxis, :, :, np.newaxis], 3, axis=-1)
+    img = np.repeat(img[np.newaxis, :, :, np.newaxis], 3, axis=-1)
+
+    # if len(img.shape) == 2:
+    #     img = np.stack((img)*3, axis=-1)
+
+    # import ipdb; ipdb.set_trace()
+
+    # # create batch dimension
+    # img = np.expand_dims(img, axis=0)
+
+    img = preprocess_input(img)
 
     # Run the model and get the filter responses
     with tf.device(device):
-        output = model.predict(input_batch, verbose=0)
+        output = model.predict(img, verbose=0)
 
     # Remove batch dimension
     output = np.squeeze(output)

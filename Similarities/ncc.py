@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from scipy.signal import fftconvolve
+np.seterr(divide='ignore', invalid='ignore')
 
 def print_images(print_filter, shoe_filter, ncc):
     plt.subplot(1, 3, 1)
@@ -80,7 +81,7 @@ def get_similarity(print_, shoe):
     ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
 
     # Index of ncc_array to insert new values into
-    # final_index = 0
+    final_index = 0
     for index in range(n_filters):
 
         # Remove outer pixel artefacts from prinat and shoe filter
@@ -93,13 +94,17 @@ def get_similarity(print_, shoe):
         # Calculate NCC map, slicing result to match the same size as the input shoe filter
         # The slicing is required in cases where the padding is an even number
         # ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
-        ncc_array[index] = normxclorr2(print_filter, shoe_filter, 'same')
+        #
+        T = 0.2
+
+        if g(print_filter) > T and g(shoe_filter) > T:
+            ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
+            final_index += 1
         # import ipdb; ipdb.set_trace()
 
 
-
     # Slice ncc_array to only include computed NCC maps
-    # ncc_array = ncc_array[:final_index]
+    ncc_array = ncc_array[:final_index]
 
     # number of NCC maps computed
     k = ncc_array.shape[0]
