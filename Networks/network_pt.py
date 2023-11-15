@@ -29,6 +29,10 @@ class Model:
             # Convert image from numpy array to tensor
             # This automatically normalises the image to the range [0, 1]
             transforms.ToTensor(),
+
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+
             # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
             transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
         ])
