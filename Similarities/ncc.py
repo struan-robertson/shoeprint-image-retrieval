@@ -78,15 +78,18 @@ def get_similarity(print_, shoe):
     x = image_dims[1]
 
     # Array to hold computed normalised cross correlation maps
-    ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
+    # ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
+    ncc_array = np.empty((n_filters, y-4, x-4), dtype=np.float32)
 
     # Index of ncc_array to insert new values into
     final_index = 0
     for index in range(n_filters):
 
         # Remove outer pixel artefacts from prinat and shoe filter
-        print_filter = print_[index][1:-1, 1:-1]
-        shoe_filter = shoe[index][1:-1, 1:-1]
+        # print_filter = print_[index][1:-1, 1:-1]
+        # shoe_filter = shoe[index][1:-1, 1:-1]
+        print_filter = print_[index][2:-2, 2:-2]
+        shoe_filter = shoe[index][2:-2, 2:-2]
 
         # Pad shoe filter to allow for template matching of every pixel
         # padded_target = cv2.copyMakeBorder(shoe_filter, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=(0,))
