@@ -26,8 +26,7 @@ model.eval()
 
 # Contrast limited adaptive histogram equalisation
 # TODO extract hyperparameters (clip limit and grid size) to external TOML file
-# clahe = cv2.createCLAHE(clipLimit=0.5, tileGridSize=(4, 4))
-clahe = cv2.createCLAHE()
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
 def get_filters(img):
     """
