@@ -1,0 +1,5 @@
+torch==1.13.1+rocm5.2
+torchvision==0.14.1+rocm5.2
+efficientnet-pytorch==0.7.1
+
+--extra-index-url https://download.pytorch.org/whl/rocm5.2
