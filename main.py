@@ -42,7 +42,7 @@ def load_images(dir):
     images = []
     for image_file in image_files:
         img_path = os.path.join(dir, image_file)
-        img = Image.open(img_path).convert('L')  # Convert to grayscale
+        img = Image.open(img_path)  # Convert to grayscale
         img_array = np.array(img)
         images.append(img_array)
 
