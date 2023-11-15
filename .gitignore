@@ -1,3 +1,5 @@
 /Results/
 /__pycache__/
 /Memmaps/
+/.venv/
+*__pycache__*
