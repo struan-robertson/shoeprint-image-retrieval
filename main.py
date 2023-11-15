@@ -19,7 +19,9 @@ import gc
 # from Networks.vgg19 import get_filters
 
 # Uses Tensorflow
-from Networks.vgg19_tf import get_filters
+# from Networks.vgg19_tf import get_filters
+
+from Networks.network_pt import Model
 
 # ------ Similarity Measures ------
 
@@ -49,7 +51,7 @@ def load_images(dir):
     # Return list of images in directory
     return images
 
-def get_all_filters(images):
+def get_all_filters(images, model):
     """
     Calculate the convolutional filters for each image in a list, returning a list of the corresponding filters.
     """
@@ -57,7 +59,7 @@ def get_all_filters(images):
 
     # Calculate conv filter for each image
     for image in tqdm(images):
-        filters = get_filters(image)
+        filters = model.get_filters(image)
         image_filters.append(filters)
 
     # Return conv filters
@@ -101,13 +103,16 @@ def initialise_data(data_dir):
         for row in reader:
             matching_pairs[int(row[0])] = int(row[1])
 
+    # Use default values for VGG19
+    model = Model()
+
     # Calculate conv filters for print images
     print("Calculating convolutional filters for prints")
-    print_filters = get_all_filters(print_images)
+    print_filters = get_all_filters(print_images, model)
 
     # Calculate conv filters for shoe images
     print("Calculating convolutional filters for shoes")
-    shoe_filters = get_all_filters(shoe_images)
+    shoe_filters = get_all_filters(shoe_images, model)
 
     print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
     shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
@@ -168,6 +173,6 @@ def compare(print_filters, shoe_filters, matching_pairs):
 
 # print_filters, shoe_filters, matching_pairs = initialise_data("../Data/FID-300")
 
-# rankings = compare(print_filters, shoe_filters)
+# rankings = compare(print_filters, shoe_filters, matching_pairs)
 
 # write_csv('results.csv', rankings)

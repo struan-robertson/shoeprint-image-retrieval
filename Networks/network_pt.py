@@ -26,15 +26,16 @@ class Model:
         # Image transforms
         # TODO: dont think this is the full transforms done when training on imagenet
         self.transform = transforms.Compose([
+
             # Convert image from numpy array to tensor
             # This automatically normalises the image to the range [0, 1]
             transforms.ToTensor(),
 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-
             # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
             transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+
         ])
 
         # Check if a GPU is available and if not, use the CPU
@@ -42,8 +43,10 @@ class Model:
 
         # Select model from model string
         if model_str == "VGG19":
-            # Create model
             model = models.vgg19(weights="VGG19_Weights.DEFAULT")
+        elif model_str == "VGG19_BN":
+            model = models.vgg19_bn(weights="VGG19_BN_Weights.DEFAULT")
+
 
         # Select n layers from model
         model = list(model.features.children())[:layers] # pyright: ignore
