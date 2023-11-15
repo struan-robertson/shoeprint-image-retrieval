@@ -3,3 +3,4 @@
 /Memmaps/
 /.venv/
 *__pycache__*
+/.direnv/
