@@ -27,39 +27,61 @@ class Model:
         self.clahe = cv2.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
 
         # Image transforms
-        # TODO: dont think this is the full transforms done when training on imagenet
-        self.transform = transforms.Compose([
+        # torchvision_transform = transforms.Compose([
 
-            # Convert image from numpy array to tensor
-            # This automatically normalises the image to the range [0, 1]
-            transforms.ToTensor(),
+        #     # Convert image from numpy array to tensor
+        #     # This automatically normalises the image to the range [0, 1]
+        #     transforms.ToTensor(),
 
-            # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
-            transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+        #     # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
+        #     transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        #     # Normalise to values used for torchvision pretrained models
+        #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 
-        ])
+        # ])
 
         # Check if a GPU is available and if not, use the CPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Select model from model string
         if model_str == "VGG19":
-            model = models.vgg19(weights="VGG19_Weights.DEFAULT")
+            model = models.vgg19(models.VGG19_Weights.IMAGENET1K_V1)
+            model = nn.Sequential(*model)
+            model = list(model.features.children())[:layers] # pyright: ignore
+            transform = models.VGG19_Weights.IMAGENET1K_V1.transforms
         elif model_str == "VGG19_BN":
-            model = models.vgg19_bn(weights="VGG19_BN_Weights.DEFAULT")
+            model = models.vgg19_bn(models.VGG19_BN_Weights.IMAGENET1K_V1)
+            model = nn.Sequential(*model)
+            model = list(model.features.children())[:layers] # pyright: ignore
+            transform = models.VGG19_BN_Weights.IMAGENET1K_V1.transforms
+        else:
+            raise LookupError("Model string not found")
 
 
-        # Select n layers from model
-        model = list(model.features.children())[:layers] # pyright: ignore
+        # elif model_str == "EfficientNet":
+        #     model = timm.create_model("efficientnet_b1.ft_in1k", pretrained=True, features_only=True)
+        #     data_config = timm.data.resolve_model_data_config(model)
+        #     self.__timm_transform = timm.data.create_transform(**data_config, is_training=False)
+
+        #     transform = self.__timm_transform__
 
         # Create model
-        model = nn.Sequential(*model)
-        model = model.to(self.device)
+        model = model.to(self.device)~ #pyright: ignore
         model.eval()
 
         self.model = model
+        self.transform = transform
+
+    def __timm_transform__(self, img):
+
+            img = np.repeat(img[:,:,np.newaxis], 3, axis=2)
+
+            # Convert to PIL Image
+            img = Image.fromarray(img)
+
+            return self.__timm_transform(img) #pyright: ignore
+
 
     def get_filters(self, img) -> np.ndarray:
         """Pass an image through the model and return the resulting feature maps.
