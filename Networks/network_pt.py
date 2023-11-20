@@ -36,9 +36,6 @@ class Model:
         #     # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
         #     transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
 
-        #     # Normalise to values used for torchvision pretrained models
-        #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-
         # ])
 
         # Check if a GPU is available and if not, use the CPU
@@ -48,16 +45,16 @@ class Model:
         if model_str == "VGG19":
             model = models.vgg19(models.VGG19_Weights.IMAGENET1K_V1)
             model = nn.Sequential(*model)
-            model = list(model.features.children())[:layers] # pyright: ignore
-            transform = models.VGG19_Weights.IMAGENET1K_V1.transforms
+            model = list(model.features.children())[:layers]  # pyright: ignore
+            transform = self.__torch_vision_transform__(models.VGG19_Weights.IMAGENET1K_V1.transforms)
+
         elif model_str == "VGG19_BN":
             model = models.vgg19_bn(models.VGG19_BN_Weights.IMAGENET1K_V1)
             model = nn.Sequential(*model)
-            model = list(model.features.children())[:layers] # pyright: ignore
-            transform = models.VGG19_BN_Weights.IMAGENET1K_V1.transforms
+            model = list(model.features.children())[:layers]  # pyright: ignore
+            transform = self.__torch_vision_transform__(models.VGG19_BN_Weights.IMAGENET1K_V1.transforms)
         else:
             raise LookupError("Model string not found")
-
 
         # elif model_str == "EfficientNet":
         #     model = timm.create_model("efficientnet_b1.ft_in1k", pretrained=True, features_only=True)
@@ -67,21 +64,31 @@ class Model:
         #     transform = self.__timm_transform__
 
         # Create model
-        model = model.to(self.device)~ #pyright: ignore
+        model = model.to(self.device)  # pyright: ignore
         model.eval()
 
         self.model = model
         self.transform = transform
 
     def __timm_transform__(self, img):
+        img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
 
-            img = np.repeat(img[:,:,np.newaxis], 3, axis=2)
+        # Convert to PIL Image
+        img = Image.fromarray(img)
 
-            # Convert to PIL Image
-            img = Image.fromarray(img)
+        return self.__timm_transform(img)  # pyright: ignore
 
-            return self.__timm_transform(img) #pyright: ignore
+    def __torch_vision_transform__(self, transform_func):
+        transform = transforms.Compose(
+            [
+                # transforms.ToTensor(),
+                transforms.Lambda(lambda x: torch.from_numpy(x)),
+                transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+                transforms.Lambda(transform_func),
+            ]
+        )
 
+        return transform
 
     def get_filters(self, img) -> np.ndarray:
         """Pass an image through the model and return the resulting feature maps.
