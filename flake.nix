@@ -48,6 +48,7 @@
             tqdm
             joblib
             matplotlib
+            timm
 
             # Dev requirements
             ipython
@@ -72,6 +73,12 @@
             pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ]
           }
         '';
+
+        # Set matplotlib backend
+        MPLBACKEND = "QtAGG";
+
+        # Use ROCM with radeon rx 6750 XT
+        HSA_OVERRIDE_GFX_VERSION = "10.3.0";
 
       };
     };
