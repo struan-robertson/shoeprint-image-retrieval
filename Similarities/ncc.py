@@ -78,16 +78,15 @@ def get_similarity(print_, shoe):
     x = image_dims[1]
 
     # Array to hold computed normalised cross correlation maps
-    # ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
     ncc_array = np.empty((n_filters, y-4, x-4), dtype=np.float32)
-
+    # ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
     # Index of ncc_array to insert new values into
     final_index = 0
     for index in range(n_filters):
 
         # Remove outer pixel artefacts from prinat and shoe filter
-        # print_filter = print_[index][1:-1, 1:-1]
-        # shoe_filter = shoe[index][1:-1, 1:-1]
+        # print_filter = print_[index][1:-1,1:-1]
+        # shoe_filter = shoe[index][1:-1,1:-1]
         print_filter = print_[index][2:-2, 2:-2]
         shoe_filter = shoe[index][2:-2, 2:-2]
 
@@ -100,10 +99,9 @@ def get_similarity(print_, shoe):
         #
         T = 0.2
 
-        if g(print_filter) > T and g(shoe_filter) > T:
-            ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
-            final_index += 1
-        # import ipdb; ipdb.set_trace()
+        # if g(print_filter) > T and g(shoe_filter) > T:
+        ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
+        final_index += 1
 
 
     # Slice ncc_array to only include computed NCC maps

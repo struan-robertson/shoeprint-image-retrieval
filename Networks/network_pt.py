@@ -50,14 +50,12 @@ class Model:
         # Select model from model string
         if model_str == "VGG19":
             model = models.vgg19(weights='IMAGENET1K_V1')
-            model = list(model.features.children())[:layers]  # pyright: ignore
-            model = nn.Sequential(*model)
             transform = torchvision_transforms
-
         elif model_str == "VGG19_BN":
             model = models.vgg19_bn(weights='IMAGENET1K_V1')
-            model = list(model.features.children())[:layers]  # pyright: ignore
-            model = nn.Sequential(*model)
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B1":
+            model = models.efficientnet_b1(weights="IMAGENET1K_V2")
             transform = torchvision_transforms
         else:
             raise LookupError("Model string not found")
@@ -68,6 +66,9 @@ class Model:
         #     self.__timm_transform = timm.data.create_transform(**data_config, is_training=False)
 
         #     transform = self.__timm_transform__
+
+        model = list(model.features.children())[:layers]  # pyright: ignore
+        model = nn.Sequential(*model)
 
         # Create model
         model = model.to(self.device)  # pyright: ignore

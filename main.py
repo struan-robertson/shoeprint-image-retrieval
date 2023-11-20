@@ -101,8 +101,7 @@ def initialise_data(data_dir):
         for row in reader:
             matching_pairs[int(row[0])] = int(row[1])
 
-    # Use default values for VGG19
-    model = Model()
+    model = Model("EfficientNet_B1", 7)
 
     # Calculate conv filters for print images
     print("Calculating convolutional filters for prints")
