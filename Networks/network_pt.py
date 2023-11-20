@@ -50,14 +50,18 @@ class Model:
         # Select model from model string
         if model_str == "VGG19":
             model = models.vgg19(weights='IMAGENET1K_V1')
-            model = list(model.features.children())[:layers]  # pyright: ignore
-            model = nn.Sequential(*model)
             transform = torchvision_transforms
-
         elif model_str == "VGG19_BN":
             model = models.vgg19_bn(weights='IMAGENET1K_V1')
-            model = list(model.features.children())[:layers]  # pyright: ignore
-            model = nn.Sequential(*model)
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B1":
+            model = models.efficientnet_b1(weights='IMAGENET1K_V2')
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B2":
+            model = models.efficientnet_b2(weights='IMAGENET1K_V2')
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_V2_M":
+            model = models.efficientnet_v2_m(weights='IMAGENET1K_V1')
             transform = torchvision_transforms
         else:
             raise LookupError("Model string not found")
@@ -68,6 +72,9 @@ class Model:
         #     self.__timm_transform = timm.data.create_transform(**data_config, is_training=False)
 
         #     transform = self.__timm_transform__
+        #
+        model = list(model.features.children())[:layers]  # pyright: ignore
+        model = nn.Sequential(*model)
 
         # Create model
         model = model.to(self.device)  # pyright: ignore
@@ -118,3 +125,28 @@ class Model:
 
         # Remove batch dimension and return
         return output.squeeze()
+
+    @staticmethod
+    def trim_filters(feature_map: np.ndarray, threshold: float = 0.2) -> np.ndarray:
+        """Check if feature maps have a higher ratio of positive pixels than the threshold.
+
+        Args:
+            feature_map_groups (np.ndarray): Feature map from a single image, in the shape (C, H, W).
+            threshold (float): Minimum ratio of positive pixels for feature map to pass.
+
+        Returns:
+            np.ndarray: Feature map array with feature maps not passing the test being set to NaN.
+            """
+
+        # Calculate number of positive pixels in each feature map
+        positive_counts = np.sum(feature_map > 0, axis=(1,2))
+
+        # Calculate ratio of positive pixels to total pixels
+        ratios = positive_counts / feature_map[0].size
+
+        # Check if feature map passes test
+        condition = ratios > threshold
+
+        feature_map[~condition, :, :] = np.nan
+
+        return feature_map
