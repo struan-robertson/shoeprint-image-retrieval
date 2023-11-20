@@ -56,6 +56,7 @@
             pyqt6
             rich
             line_profiler
+            torchinfo
 
           ]);
 
