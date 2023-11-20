@@ -29,33 +29,36 @@ class Model:
         # CLAHE
         self.clahe = cv2.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
 
-        # Image transforms
-        # torchvision_transform = transforms.Compose([
-
-        #     # Convert image from numpy array to tensor
-        #     # This automatically normalises the image to the range [0, 1]
-        #     transforms.ToTensor(),
-
-        #     # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
-        #     transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
-
-        # ])
+        # TorchVision pre-trained network pre-processing parameters
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
+        torchvision_transforms = transforms.Compose(
+            [
+                # Convert image from numpy array to tensor
+                # This automatically normalises the image to the range [0, 1]
+                transforms.ToTensor(),
+                # Repeat the channel of the image 3 times, as the pre-trained network expects a RGB image but the shoe images are grayscale
+                transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+                # Normalize to same values used by pytorch when training on ImageNet
+                transforms.Normalize(mean, std),
+            ]
+        )
 
         # Check if a GPU is available and if not, use the CPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Select model from model string
         if model_str == "VGG19":
-            model = models.vgg19(models.VGG19_Weights.IMAGENET1K_V1)
-            model = nn.Sequential(*model)
+            model = models.vgg19(weights='IMAGENET1K_V1')
             model = list(model.features.children())[:layers]  # pyright: ignore
-            transform = self.__torch_vision_transform__(models.VGG19_Weights.IMAGENET1K_V1.transforms)
+            model = nn.Sequential(*model)
+            transform = torchvision_transforms
 
         elif model_str == "VGG19_BN":
-            model = models.vgg19_bn(models.VGG19_BN_Weights.IMAGENET1K_V1)
-            model = nn.Sequential(*model)
+            model = models.vgg19_bn(weights='IMAGENET1K_V1')
             model = list(model.features.children())[:layers]  # pyright: ignore
-            transform = self.__torch_vision_transform__(models.VGG19_BN_Weights.IMAGENET1K_V1.transforms)
+            model = nn.Sequential(*model)
+            transform = torchvision_transforms
         else:
             raise LookupError("Model string not found")
 
@@ -80,18 +83,6 @@ class Model:
         img = Image.fromarray(img)
 
         return self.__timm_transform(img)  # pyright: ignore
-
-    def __torch_vision_transform__(self, transform_func):
-        transform = transforms.Compose(
-            [
-                # transforms.ToTensor(),
-                transforms.Lambda(lambda x: torch.from_numpy(x)),
-                transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
-                transforms.Lambda(transform_func),
-            ]
-        )
-
-        return transform
 
     def get_filters(self, img) -> np.ndarray:
         """Pass an image through the model and return the resulting feature maps.
