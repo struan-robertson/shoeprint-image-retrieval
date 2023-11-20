@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import numpy as np
 import cv2
+from PIL import Image
 
 import torch
 import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms as transforms
+
+import timm
 
 """Module used to pick a PyTorch model and then calculate convolutional filters from it."""
 
