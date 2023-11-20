@@ -12,8 +12,11 @@ import timm
 
 """Module used to pick a PyTorch model and then calculate convolutional filters from it."""
 
+
 class Model:
-    def __init__(self, model_str="VGG19", layers=23, clipLimit=2.0, tileGridSize=(8,8)) -> None:
+    def __init__(
+        self, model_str="VGG19", layers=23, clipLimit=2.0, tileGridSize=(8, 8)
+    ) -> None:
         """Constructor for Model class.
 
         Args:
