@@ -112,10 +112,6 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images, model)
 
-    # TODO if trim enabled
-    print_filters = trim(print_filters)
-    shoe_filters = trim(shoe_filters)
-
     print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
     shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
 
@@ -128,13 +124,6 @@ def write_csv(filename, rankings):
         writer = csv.writer(file)
         for rank in rankings:
             writer.writerow([rank])
-
-def trim(feature_map_group, threshold=0.2):
-    trimmed = []
-    for feature_map in feature_map_group:
-        trimmed.append(Model.trim_filters(feature_map, threshold=threshold))
-
-    return trimmed
 
 def compare(print_filters, shoe_filters, matching_pairs):
     """
@@ -156,8 +145,8 @@ def compare(print_filters, shoe_filters, matching_pairs):
         # Try paralell here, each shoe and print is a numpy array and so can be passed in shared memory
         similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
 
-        # for shoe_id, shoe in tqdm(enumerate(shoe_filters)):
-        #     get_similarity(print_, shoe, print_trimmed[print_id], shoe_trimmed[shoe_id])
+        # for shoe in tqdm(shoe_filters):
+        #     get_similarity(print_, shoe)
 
         # Sort similarities and then return the indexes in order of the sort
         # np.flip() is required as numpy sorts low -> high

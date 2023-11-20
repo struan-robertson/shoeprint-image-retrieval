@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
+from numba import njit
 import numpy as np
-from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
-
-from Networks.network_pt import Model
-
+import cv2
+from scipy.signal import fftconvolve
 np.seterr(divide='ignore', invalid='ignore')
 
 def print_images(print_filter, shoe_filter, ncc):
@@ -17,13 +16,13 @@ def print_images(print_filter, shoe_filter, ncc):
     plt.imshow(ncc)
     plt.show()
 
-# @njit
-# def g(conv_filter):
-#     """
-#     Calculate the ratio of pixels in the convolutional filter which are larger than 0.
-#     Uses Numba JIT compilation even though it is a fully Numpy function, as it is very performace critical.
-#     """
-#     return np.sum(conv_filter > 0) / conv_filter.size
+@njit
+def g(conv_filter):
+    """
+    Calculate the ratio of pixels in the convolutional filter which are larger than 0.
+    Uses Numba JIT compilation even though it is a fully Numpy function, as it is very performace critical.
+    """
+    return np.sum(conv_filter > 0) / conv_filter.size
 
 
 def normxclorr2(template, image, mode="full"):
@@ -84,11 +83,11 @@ def get_similarity(print_, shoe):
 
     # Index of ncc_array to insert new values into
     final_index = 0
-
     for index in range(n_filters):
 
         # Remove outer pixel artefacts from prinat and shoe filter
-
+        # print_filter = print_[index][1:-1, 1:-1]
+        # shoe_filter = shoe[index][1:-1, 1:-1]
         print_filter = print_[index][2:-2, 2:-2]
         shoe_filter = shoe[index][2:-2, 2:-2]
 
@@ -98,9 +97,13 @@ def get_similarity(print_, shoe):
         # Calculate NCC map, slicing result to match the same size as the input shoe filter
         # The slicing is required in cases where the padding is an even number
         # ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
-        if not np.isnan(print_filter).any() and not np.isnan(shoe_filter).any():
+        #
+        T = 0.2
+
+        if g(print_filter) > T and g(shoe_filter) > T:
             ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
             final_index += 1
+        # import ipdb; ipdb.set_trace()
 
 
     # Slice ncc_array to only include computed NCC maps
