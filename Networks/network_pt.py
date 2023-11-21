@@ -57,6 +57,15 @@ class Model:
         elif model_str == "EfficientNet_B1":
             model = models.efficientnet_b1(weights="IMAGENET1K_V2")
             transform = torchvision_transforms
+        elif model_str == "EfficientNet_B2":
+            model = models.efficientnet_b2(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B3":
+            model = models.efficientnet_b3(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B4":
+            model = models.efficientnet_b4(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
         else:
             raise LookupError("Model string not found")
 
@@ -72,6 +81,9 @@ class Model:
 
         # Create model
         model = model.to(self.device)  # pyright: ignore
+
+        # summary(model, input_size=(1, 3, 222, 265))
+
         model.eval()
 
         self.model = model
