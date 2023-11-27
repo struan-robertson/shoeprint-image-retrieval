@@ -12,6 +12,9 @@ import timm
 
 """Module used to pick a PyTorch model and then calculate convolutional filters from it."""
 
+def printmodel(model, input=(1,3,222,265)):
+    from torchinfo import summary
+    print(summary(model, input))
 
 class Model:
     def __init__(
@@ -82,7 +85,8 @@ class Model:
         # Create model
         model = model.to(self.device)  # pyright: ignore
 
-        # summary(model, input_size=(1, 3, 222, 265))
+        # printmodel(model)
+        import ipdb; ipdb.set_trace()
 
         model.eval()
 
