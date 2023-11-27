@@ -69,6 +69,27 @@ class Model:
         elif model_str == "EfficientNet_B4":
             model = models.efficientnet_b4(weights="IMAGENET1K_V1")
             transform = torchvision_transforms
+        elif model_str == "EfficientNet_B5":
+            model = models.efficientnet_b5(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNet_B7":
+            model = models.efficientnet_b7(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNetV2_S":
+            model = models.efficientnet_v2_s(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNetV2_M":
+            model = models.efficientnet_v2_m(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
+        elif model_str == "EfficientNetV2_L":
+            model = models.efficientnet_v2_l(weights="IMAGENET1K_V1")
+            # EfficientNetV2 L was trained on different mean and std deviation
+            mean = [0.5, 0.5, 0.5]
+            std = [0.5, 0.5, 0.5]
+            transform = torchvision_transforms
+        elif model_str == "DenseNet_201":
+            model = models.densenet201(weights="IMAGENET1K_V1")
+            transform = torchvision_transforms
         else:
             raise LookupError("Model string not found")
 

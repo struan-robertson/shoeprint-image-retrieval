@@ -101,7 +101,7 @@ def initialise_data(data_dir):
         for row in reader:
             matching_pairs[int(row[0])] = int(row[1])
 
-    model = Model("EfficientNet_B1", 7)
+    model = Model("EfficientNet_B5", 7)
 
     # Calculate conv filters for print images
     print("Calculating convolutional filters for prints")
