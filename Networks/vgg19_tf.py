@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import tensorflow as tf
-from tensorflow.keras.applications import VGG19
-from tensorflow.keras.applications.vgg16 import preprocess_input
-from tensorflow.keras.models import Model
+from keras.applications import VGG19
+from keras.applications.vgg16 import preprocess_input
+from keras.models import Model
 import cv2
 import numpy as np
 
