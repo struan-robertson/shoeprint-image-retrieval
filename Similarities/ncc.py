@@ -61,6 +61,22 @@ def normxclorr2(template, image, mode="full"):
 
     return out
 
+# Layers 1_2 and 3_4
+# DDIS layers 1_2, 3_4, 4_4
+
+def get_similarity_multiple(print_activations, shoe_activations):
+    # import ipdb; ipdb.set_trace()
+    max_similarity = 0
+    type = 0
+    for index in range(len(print_activations)):
+        similarity = get_similarity(print_activations[index], shoe_activations[index])
+        if similarity > max_similarity:
+            max_similarity = similarity
+            type = index
+
+    return max_similarity
+
+
 def get_similarity(print_, shoe):
     # Number of filters for both shoe and print
     n_filters = len(shoe)
@@ -79,14 +95,11 @@ def get_similarity(print_, shoe):
 
     # Array to hold computed normalised cross correlation maps
     ncc_array = np.empty((n_filters, y-4, x-4), dtype=np.float32)
-    # ncc_array = np.empty((n_filters, y-2, x-2), dtype=np.float32)
     # Index of ncc_array to insert new values into
     final_index = 0
     for index in range(n_filters):
 
         # Remove outer pixel artefacts from prinat and shoe filter
-        # print_filter = print_[index][1:-1,1:-1]
-        # shoe_filter = shoe[index][1:-1,1:-1]
         print_filter = print_[index][2:-2, 2:-2]
         shoe_filter = shoe[index][2:-2, 2:-2]
 
@@ -97,7 +110,7 @@ def get_similarity(print_, shoe):
         # The slicing is required in cases where the padding is an even number
         # ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
         #
-        T = 0.2
+        T = 0.1
 
         # if g(print_filter) > T and g(shoe_filter) > T:
         ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
