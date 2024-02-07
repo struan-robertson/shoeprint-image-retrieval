@@ -2,7 +2,7 @@
   # Bit of an ugly impure solution but only PyTorch 1.13.1 works with my GPU so use pip to install it, other dependencies are installed through
   description = "PyTorch 1.13.1 Development Environment";
 
-  inputs = { nixpkgs.url = "github:nixos/nixpkgs/nixos-23.05"; };
+  inputs = { nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable"; };
 
   outputs = { self, nixpkgs, ... }:
     let
@@ -57,7 +57,6 @@
             rich
             line_profiler
             torchinfo
-
           ]);
 
         # Run this command, only after creating the virtual environment
