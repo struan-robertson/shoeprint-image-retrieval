@@ -23,7 +23,9 @@ from Networks.network_pt import Model
 
 # ------ Similarity Measures ------
 
-from Similarities.ncc import get_similarity
+# from Similarities.ncc import get_similarity, get_similarity_multiple
+# from Similarities.orb import get_similarity
+from Similarities.dim import get_similarity
 
 # from Similarities.orb import get_similarity
 
@@ -101,7 +103,11 @@ def initialise_data(data_dir):
         for row in reader:
             matching_pairs[int(row[0])] = int(row[1])
 
-    model = Model("EfficientNet_B5", 7)
+    # model = Model("EfficientNet_B5", 7)
+    # model = Model("VGG19", 27)
+    model = Model("EfficientNetV2_M", 4)
+    # model = Model("EfficientNetV2_M", 1)
+    # model = Model("VGG16", 23)
 
     # Calculate conv filters for print images
     print("Calculating convolutional filters for prints")
@@ -111,8 +117,11 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images, model)
 
+    import ipdb; ipdb.set_trace()
+
     print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
     shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
+
 
     gc.collect()
 
@@ -142,14 +151,19 @@ def compare(print_filters, shoe_filters, matching_pairs):
 
         # Loop through each set of shoe filters
         # Try paralell here, each shoe and print is a numpy array and so can be passed in shared memory
-        similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
+        # similarities = Parallel(n_jobs=32)(delayed(get_similarity_multiple)(print_, shoe) for shoe in shoe_filters)
+        # similarities = Parallel(n_jobs=31)(delayed(get_similarity_multiple)(print_, shoe) for shoe in shoe_filters)
 
-        # for shoe in tqdm(shoe_filters):
-        #     get_similarity(print_, shoe)
+        # similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
+
+        similarities = []
+        for shoe in tqdm(shoe_filters):
+            similarities.append(get_similarity(print_, shoe))
 
         # Sort similarities and then return the indexes in order of the sort
         # np.flip() is required as numpy sorts low -> high
         sorted = np.flip(np.argsort(similarities)) # type: ignore
+        # sorted = np.argsort(similarities)
 
         # Find the rank of the true match within the sorted array
         # matching_pairs[id+1] because the image id is equal to index + 1
