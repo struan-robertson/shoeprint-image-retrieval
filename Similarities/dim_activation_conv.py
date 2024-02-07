@@ -5,6 +5,8 @@ import ipdb
 from scipy.signal import convolve
 from scipy.signal import fftconvolve
 
+import torch
+
 def dim_activation_conv(w, X, v=[], Y=np.array([]), iterations=30, trueRange=[]):
     """
     TODO change MATLAB comment
@@ -30,9 +32,9 @@ def dim_activation_conv(w, X, v=[], Y=np.array([]), iterations=30, trueRange=[])
     X = query image"""
 
     # Simulate grayscale
-    X = X[:,:,:2]
-    for i in range(len(w)):
-        w[i] = w[i][:,:,:2]
+    # X = X[:,:,:2]
+    # for i in range(len(w)):
+    #     w[i] = w[i][:,:,:2]
 
     # Shape of query image
     a, b, nInputChannels = X.shape
