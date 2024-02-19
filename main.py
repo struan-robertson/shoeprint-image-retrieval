@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 from PIL import Image
 import numpy as np
 np.seterr(divide='ignore', invalid='ignore')
@@ -8,6 +9,8 @@ from tqdm import tqdm
 
 from joblib import Parallel, delayed, load, dump
 import gc
+
+import ipdb
 
 # from line_profiler import profile
 
@@ -23,9 +26,9 @@ from Networks.network_pt import Model
 
 # ------ Similarity Measures ------
 
-# from Similarities.ncc import get_similarity, get_similarity_multiple
+from Similarities.ncc import get_similarity
 # from Similarities.orb import get_similarity
-from Similarities.dim import get_similarity
+# from Similarities.dim import get_similarity
 
 # from Similarities.orb import get_similarity
 
@@ -60,6 +63,7 @@ def get_all_filters(images, model):
     # Calculate conv filter for each image
     for image in tqdm(images):
         filters = model.get_filters(image)
+        filters = filters.cpu()
         image_filters.append(filters)
 
     # Return conv filters
@@ -117,13 +121,12 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images, model)
 
-    import ipdb; ipdb.set_trace()
 
-    print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
-    shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
+    # print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
+    # shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
 
 
-    gc.collect()
+    # gc.collect()
 
     return (print_filters, shoe_filters, matching_pairs)
 
@@ -142,12 +145,12 @@ def compare(print_filters, shoe_filters, matching_pairs):
     rankings = []
 
     # Progress bar to measure time taken per shoe
-    pbar = tqdm(total=len(print_filters))
+    # pbar = tqdm(total=len(print_filters), file=sys.stdout)
 
     # Loop through each set of print filters
     for id, print_ in enumerate(print_filters):
         # Update progressbar to reflect print being calculated
-        pbar.desc = f"Print {id+1}"
+        # pbar.desc = f"Print {id+1}"
 
         # Loop through each set of shoe filters
         # Try paralell here, each shoe and print is a numpy array and so can be passed in shared memory
@@ -156,9 +159,20 @@ def compare(print_filters, shoe_filters, matching_pairs):
 
         # similarities = Parallel(n_jobs=32)(delayed(get_similarity)(print_, shoe) for shoe in shoe_filters)
 
+        debug = False
+
+        # if id < 18:
+        #     continue
+
+        # if id == 18:
+        #     debug = True
+        # elif id == 19:
+        #     break
+
         similarities = []
-        for shoe in tqdm(shoe_filters):
-            similarities.append(get_similarity(print_, shoe))
+        for shoe in shoe_filters:
+            # similarities.append(get_similarity(print_, shoe).cpu().numpy())
+            similarities.append(get_similarity(print_, shoe, debug).numpy())
 
         # Sort similarities and then return the indexes in order of the sort
         # np.flip() is required as numpy sorts low -> high
@@ -172,10 +186,11 @@ def compare(print_filters, shoe_filters, matching_pairs):
         rankings.append(rank)
 
         # Update progress bar
-        pbar.update()
+        # pbar.update()
 
         # Print result
-        pbar.write(f"Print {id+1} true match ranked {rank}")
+        # pbar.write(f"Print {id+1} true match ranked {rank}")
+        print(f"Print {id+1} true match ranked {rank}")
         # Reset progress bar to 0
 
     return rankings

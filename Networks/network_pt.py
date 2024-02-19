@@ -189,7 +189,7 @@ class Model:
             output = self.model(input_batch)
 
         # Move ouput to CPU
-        output = output.cpu()
+        # output = output.cpu()
 
         # DDIS layers 1_2, 3_4, 4_4
         # TODO make more general
@@ -206,7 +206,7 @@ class Model:
         # layer_3_4 = layer_3_4.squeeze()
 
         # Convert tensor to NumPy array
-        output = output.numpy()
+        # output = output.numpy()
         output = output.squeeze()
 
         # Remove batch dimension and return
