@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
+import torch
+import torch.nn.functional as F
+from fft_conv_pytorch import fft_conv
+
+import ipdb
+
 from numba import njit
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from scipy.signal import fftconvolve
 np.seterr(divide='ignore', invalid='ignore')
-
-def print_images(print_filter, shoe_filter, ncc):
-    plt.subplot(1, 3, 1)
-    plt.imshow(print_filter)
-    plt.subplot(1, 3, 2)
-    plt.imshow(shoe_filter)
-    plt.subplot(1, 3, 3)
-    plt.imshow(ncc)
-    plt.show()
 
 @njit
 def g(conv_filter):
@@ -40,6 +37,7 @@ def normxclorr2(template, image, mode="full"):
     same: The output is the same size as image, centered with respect to the ‘full’ output.
     :return: N-D array of same dimensions as image. Size depends on mode parameter.
     """
+
     template = template - np.mean(template)
     image = image - np.mean(image)
 
@@ -61,23 +59,90 @@ def normxclorr2(template, image, mode="full"):
 
     return out
 
-# Layers 1_2 and 3_4
-# DDIS layers 1_2, 3_4, 4_4
+# Pytorch implementation of above function
+def normxclorr_pt(template, image, mode="full"):
 
-def get_similarity_multiple(print_activations, shoe_activations):
-    # import ipdb; ipdb.set_trace()
-    max_similarity = 0
-    type = 0
-    for index in range(len(print_activations)):
-        similarity = get_similarity(print_activations[index], shoe_activations[index])
-        if similarity > max_similarity:
-            max_similarity = similarity
-            type = index
+    template = template - torch.mean(template)
+    image = image - torch.mean(image)
 
-    return max_similarity
+    image = image.unsqueeze(0).unsqueeze(0)
+    template = template.reshape(1, 1, template.shape[0], template.shape[1])
 
+    template = template.cuda()
+    image = image.cuda()
+    a1 = torch.ones(template.shape).cuda()
 
-def get_similarity(print_, shoe):
+    out = fft_conv(image, template.conj(), padding="same")
+
+    image = fft_conv(torch.square(image), a1, padding="same") - \
+            torch.square(fft_conv(image, a1, padding="same")) / (torch.prod(torch.tensor(template.shape)))
+
+    out = out.cpu()
+    image = image.cpu()
+    template = template.cpu()
+
+    # Remove small machine precision errors after subtraction
+    image[torch.where(image < 0)] = 0
+
+    template = torch.sum(torch.square(template))
+
+    out = out / torch.sqrt(image * template)
+
+    out[torch.where(torch.logical_not(torch.isfinite(out)))] = 0
+
+    return out
+
+# Pytorch implementation of normxclorr, batching multiple kernels and images to be run simultaniously
+def normxclorr_pt_many(template, image, n_filters):
+
+    # Subtract mean of individual templates
+    for i in range(n_filters):
+        template[i] = template[i] - torch.mean(template[i])
+        image[:,i] = image[:,i] - torch.mean(image[:,i])
+
+    # Only do fft convolutions on GPU
+    template = template.cuda()
+    image = image.cuda()
+    a1 = torch.ones(template.shape).cuda()
+
+    out = fft_conv(image, template.conj(), padding="same", groups=n_filters)
+
+    first_part = fft_conv(torch.square(image), a1, padding="same", groups=n_filters)
+    second_part = torch.square(fft_conv(image, a1, padding="same", groups=n_filters))
+    third_part = (torch.prod(torch.tensor(template.shape[2:]))) # Needs to be the size of the individual filters
+
+    first_part = first_part.cpu()
+    second_part = second_part.cpu()
+    third_part = third_part.cpu()
+    template = template.cpu()
+    out = out.cpu()
+
+    image = image.squeeze()
+    first_part = first_part.squeeze()
+    second_part = second_part.squeeze()
+
+    image = first_part - second_part / third_part
+
+    # Remove small machine precision errors after subtraction
+    image[torch.where(image < 0)] = 0
+
+    template = template.squeeze()
+    out = out.squeeze()
+
+    for i in range(n_filters):
+       template_sum = torch.sum(torch.square(template[i]))
+       out[i] = out[i] / torch.sqrt(image[i] * template_sum)
+
+    out[torch.where(torch.logical_not(torch.isfinite(out)))] = 0
+
+    return out
+
+def get_similarity(print_, shoe, debug=False):
+
+    # Crop arrays by 2 pixels/edge to remove edge artifacts
+    print_ = print_[:, 2:-2, 2:-2]
+    shoe = shoe[:, 2:-2, 2:-2]
+
     # Number of filters for both shoe and print
     n_filters = len(shoe)
     # Dimensions of shoe filters
@@ -85,50 +150,65 @@ def get_similarity(print_, shoe):
     # Dimensions of print filters
     template_dims = print_[0].shape
 
-    # Amount required to pad shoe filter to allow for template matching of every pixel
-    pad_y = template_dims[0] // 2
-    pad_x = template_dims[1] // 2
+    # Very ugly hack, should not be necessary on GPUs actually supported by PyTorch
+    # Pad height if one of the values that results in a corrupted FFT convolution
+    broken_heights = [1, 8, 9, 16, 22, 29, 30, 33, 36, 41, 48, 50, 57, 61, 63, 67, 71, 74, 78, 84, 85, 87, 96]
+    new_height = print_.shape[1]
+    while new_height in broken_heights:
+        new_height += 1
+    if new_height != print_.shape[1]:
+        number_zeros = new_height - print_.shape[1]
+        print_ = F.pad(print_, (0, 0, number_zeros, 0), "constant", 0)
+        template_dims = print_[0].shape
 
-    # Dimension sizes of shoe filter
-    y = image_dims[0]
-    x = image_dims[1]
+    # Debugging comparisons between numpy and pytorch
+    if debug:
+        # print_test = print_[0].cpu().numpy()
+        # shoe_test = shoe[0].cpu().numpy()
+        # test = normxclorr_pt(print_test, shoe_test)
 
-    # Array to hold computed normalised cross correlation maps
-    ncc_array = np.empty((n_filters, y-4, x-4), dtype=np.float32)
-    # Index of ncc_array to insert new values into
-    final_index = 0
-    for index in range(n_filters):
+        # ipdb.set_trace()
+        ncc_array_np = np.zeros(shoe.shape)
+        ncc_array_pt = torch.zeros(shoe.shape)
+        for index in range(n_filters):
+            print_filter = print_[index]
+            shoe_filter = shoe[index]
 
-        # Remove outer pixel artefacts from prinat and shoe filter
-        print_filter = print_[index][2:-2, 2:-2]
-        shoe_filter = shoe[index][2:-2, 2:-2]
+            ncc_array_np[index] = normxclorr2(print_filter.numpy(), shoe_filter.numpy(), "same")
+            ncc_array_pt[index] = normxclorr_pt(print_filter, shoe_filter, "same").squeeze()
 
-        # Pad shoe filter to allow for template matching of every pixel
-        # padded_target = cv2.copyMakeBorder(shoe_filter, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=(0,))
+        ncc_array_np_sum = np.sum(ncc_array_np, axis=0)
+        ncc_array_pt_sum = torch.sum(ncc_array_pt, dim=0)
 
-        # Calculate NCC map, slicing result to match the same size as the input shoe filter
-        # The slicing is required in cases where the padding is an even number
-        # ncc_array[index] = cv2.matchTemplate(padded_target, print_filter, cv2.TM_CCORR_NORMED)[:y, :x]
-        #
-        T = 0.1
+        np_sim = np.max(ncc_array_np_sum) / n_filters
+        pt_sim = torch.max(ncc_array_pt_sum) / n_filters
 
-        # if g(print_filter) > T and g(shoe_filter) > T:
-        ncc_array[final_index] = normxclorr2(print_filter, shoe_filter, 'same')
-        final_index += 1
+        # test = normxclorr2(print_test, shoe_test, "same")
+        # test2 = normxclorr_pt(print_[0], shoe[0], "same")
 
+        # print(pt_sim - np_sim)
 
-    # Slice ncc_array to only include computed NCC maps
-    ncc_array = ncc_array[:final_index]
+        if np.sqrt((pt_sim - np_sim)**2) > 0.001:
+            ipdb.set_trace()
+            # test_np = normxclorr2(print_[0].numpy(), shoe[0].numpy(), "same")
+            test_pt = normxclorr_pt(print_[0], shoe[0], "same")
+            print(f"{print_[0].shape} : {shoe[0].shape}")
 
-    # number of NCC maps computed
-    k = ncc_array.shape[0]
+    # Add batch dimension
+    # TODO actually batch images by same size
+    shoe = shoe.unsqueeze(0)
 
-    # The similarity score is equal to the maximum pixel of the sum of all NCC maps divided by the number of NCC maps
-    if k != 0:
-        sum_ncc = np.sum(ncc_array, axis=0)
-        similarity = np.max(sum_ncc) / k
-        return(similarity)
-    # If no NCC maps were computed (no filters passed the threshold), similarity is 0
-    else:
-        similarity = 0.0
-        return(similarity)
+    # Since we're doing depthwise convolution, out_channels = in_channels = num_channels
+    # and groups = num_channels, so in_channels/groups = 1
+
+    print_ = print_.reshape(n_filters, 1, template_dims[0], template_dims[1])
+
+    ncc_array = normxclorr_pt_many(print_, shoe, n_filters)
+
+    # Remove batch dimension
+    ncc_array = ncc_array.squeeze()
+
+    sum_ncc = torch.sum(ncc_array, dim=0)
+    similarity = torch.max(sum_ncc) / n_filters
+
+    return similarity
