@@ -2,10 +2,8 @@
 import numpy as np
 
 import ipdb
-from scipy.signal import convolve
-from scipy.signal import fftconvolve
 
-import torch
+from scipy.signal import fftconvolve
 
 def dim_activation_conv(w, X, v=[], Y=np.array([]), iterations=30, trueRange=[]):
     """
@@ -107,8 +105,7 @@ def dim_activation_conv(w, X, v=[], Y=np.array([]), iterations=30, trueRange=[])
                     # Ok so this seems to result in a non-flipped result
                     #
                     # Locations in the feature map with a higher value result in the convolution
-                    # R[:, :, j] += fftconvolve(Y[:,:,i], v[i][:,:,j], mode='same') #
-                    R[:, :, j] += convolve(Y[:,:,i], v[i][:,:,j], mode='same') #
+                    R[:, :, j] += fftconvolve(Y[:,:,i], v[i][:,:,j], mode='same') #
 
         # ipdb.set_trace()
         R[R<0] = 0
@@ -138,8 +135,7 @@ def dim_activation_conv(w, X, v=[], Y=np.array([]), iterations=30, trueRange=[])
                     # However input is greatest at best match location, _why_?
                     #
                     # I need to take into account the multiple templates
-                    # input += fftconvolve(E[:,:,j], w[i][:,:,j], mode='same')
-                    input += convolve(E[:,:,j], w[i][:,:,j], mode='same')
+                    input += fftconvolve(E[:,:,j], w[i][:,:,j], mode='same')
 
             # if t == 9:
             #     ipdb.set_trace()

@@ -17,7 +17,7 @@ def preprocess(img):
 
     return np.stack((positive, negative), axis=2)
 
-def get_similarity(print_, shoe):
+def get_similarity(print_, shoe, device="cpu"):
 
     n_filters = len(shoe)
 
@@ -32,10 +32,14 @@ def get_similarity(print_, shoe):
 
     score = np.zeros((scan_dims[0]-4, scan_dims[1]-4))
 
+    # Remove outer pixel artefacts from print and shoe filter
+    print_ = print_[:, 2:-2, 2:-2]
+    scan = shoe[:, 2:-2, 2:-2]
+
     for index in range(n_filters):
-        # Remove outer pixel artefacts from prinat and shoe filter
-        print_filter = print_[index][2:-2, 2:-2]
-        scan_filter = shoe[index][2:-2, 2:-2]
+
+        print_filter = print_[index]
+        scan_filter = scan[index]
 
         # Pad shoe filter
         # scan_filter = np.pad(scan_filter, [(print_dims[0], print_dims[0]), (print_dims[1], print_dims[1])], mode='symmetric') #pyright: ignore
@@ -62,7 +66,7 @@ def get_similarity(print_, shoe):
             while rand_index in selected_filters:
                 rand_index = randint(0, n_filters-1)
 
-            rand_filter = print_[rand_index][2:-2, 2:-2]
+            rand_filter = print_[rand_index]
             selected_filters.append(rand_index)
 
             templates.append(preprocess(rand_filter))
@@ -72,6 +76,7 @@ def get_similarity(print_, shoe):
         y = dim_activation_conv(templates, scan_filter, [], np.array([]), 10)
 
         # y = y[print_dims[0]:-print_dims[0], print_dims[1]:-print_dims[1], :]
+
 
         score += y[:,:,0]
 
