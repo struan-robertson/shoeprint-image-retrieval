@@ -34,7 +34,6 @@ from Similarities.ncc import get_similarity
 # from Similarities.orb import get_similarity
 # from Similarities.dim import get_similarity
 
-# from Similarities.orb import get_similarity
 
 def load_images(dir):
     """
@@ -281,6 +280,9 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
             shoe_shared.append((shared, shape))
 
+        # Debug
+        # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue)
+
         # Spawn each process
         processes = []
         for i in range(n_processes):
@@ -290,7 +292,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
         # Update tqdm progress bar with values in queue and counter
         with tqdm(total=n_prints, file=sys.stdout) as pbar:
-            while counter.value <= n_prints: #pyright: ignore
+            while counter.value < n_prints: #pyright: ignore
                 while not queue.empty():
                     message = queue.get()
                     pbar.write(message)
