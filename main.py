@@ -296,13 +296,23 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
                 while not queue.empty():
                     message = queue.get()
                     pbar.write(message)
-                current_value = counter.value #pyright: ignore
-                pbar.update(current_value - pbar.n)
+
+                pbar.update(counter.value - pbar.n ) #pyright: ignore
+                pbar.refresh()
+
                 time.sleep(1)
+
+            pbar.update(counter.value - pbar.n) #pyright: ignore
+
+
+
 
         # Join processes to ensure they have all terminated
         for p in processes:
             p.join()
+
+        # No need to return a shared array
+        rankings = np.frombuffer(rankings.get_obj(), dtype=np.int32) #pyright: ignore
 
     else:
         raise NotImplementedError("Device {device} not implemented")
