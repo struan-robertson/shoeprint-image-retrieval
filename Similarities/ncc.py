@@ -48,6 +48,24 @@ def normxcorr(template, image, mode="same"):
 
     return out
 
+def normxcorr_simple(template, image, mode="same"):
+    """
+    Not proper NCC and slightly less accurate, however is considerably quicker to run
+    """
+
+    template = template - np.mean(template)
+    image = image - np.mean(image)
+
+    template = np.flipud(np.fliplr(template))
+
+    out = convolve(image, template, mode=mode)
+
+    # TODO if using this should really calculate std (and means) for all templates and images
+    # before calling this function, would speed things up a lot
+    out /= np.std(template) * np.std(image) * np.prod(template.shape)
+
+    return out
+
 # Pytorch implementation of above function
 def normxcorr_pt(template, image, padding="same"):
 
@@ -146,6 +164,7 @@ def get_similarity(print_, shoe):
         shoe_filter = shoe[index]
 
         ncc_array[index] = normxcorr(print_filter, shoe_filter, "same")
+        # ncc_array[index] = normxcorr_simple(print_filter, shoe_filter, "same")
 
     ncc_array = np.sum(ncc_array, axis=0)
 
