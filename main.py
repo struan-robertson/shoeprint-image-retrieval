@@ -146,6 +146,13 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
     scaled_prints_arr = [print_filters]
 
+    # Mirror image to account for right and left feet
+    # mirrored_filters = []
+    # for print_ in print_filters:
+    #     mirrored_filters.append(np.fliplr(print_))
+
+    # scaled_prints_arr.append(mirrored_filters)
+
     for s in scales:
         new_prints = []
 
@@ -180,10 +187,10 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
         for print_id, print_ in zip(range(*print_ids), rotated_prints):
             # TODO remove this to simulate IRL
-            if rankings[print_id] < 10 and rankings[print_id] != 0:
-                with counter.get_lock():
-                    counter.value += 1
-                continue
+            # if rankings[print_id] < 10 and rankings[print_id] != 0:
+            #     with counter.get_lock():
+            #         counter.value += 1
+            #     continue
 
             similarities = []
             for shoe in shoe_filters:
@@ -339,7 +346,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
             p.start()
 
         # Update tqdm progress bar with values in queue and counter
-        work = (len(rotations)+1) * (len(scales)+1) * n_prints
+        work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
         with tqdm(total=work) as pbar:
             while counter.value < work: #pyright: ignore
                 while not queue.empty():
