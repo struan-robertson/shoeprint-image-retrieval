@@ -6,23 +6,11 @@ from fft_conv_pytorch import fft_conv
 
 import ipdb
 
-from numba import njit
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
-from scipy.signal import fftconvolve
 np.seterr(divide='ignore', invalid='ignore')
+from scipy.signal import convolve
 
-@njit
-def g(conv_filter):
-    """
-    Calculate the ratio of pixels in the convolutional filter which are larger than 0.
-    Uses Numba JIT compilation even though it is a fully Numpy function, as it is very performace critical.
-    """
-    return np.sum(conv_filter > 0) / conv_filter.size
-
-
-def normxclorr2(template, image, mode="full"):
+def normxcorr(template, image, mode="same"):
     """
     https://github.com/Sabrewarrior/normxcorr2-python/blob/master/normxcorr2.py
     Input arrays should be floating point numbers.
@@ -40,14 +28,14 @@ def normxclorr2(template, image, mode="full"):
 
     template = template - np.mean(template)
     image = image - np.mean(image)
-
     a1 = np.ones(template.shape)
     # Faster to flip up down and left right then use fftconvolve instead of scipy's correlate
     ar = np.flipud(np.fliplr(template))
-    out = fftconvolve(image, ar.conj(), mode=mode)
 
-    image = fftconvolve(np.square(image), a1, mode=mode) - \
-            np.square(fftconvolve(image, a1, mode=mode)) / (np.prod(template.shape))
+    out = convolve(image, ar, mode=mode)
+
+    image = convolve(np.square(image), a1, mode=mode) - \
+            np.square(convolve(image, a1, mode=mode)) / (np.prod(template.shape))
 
     # Remove small machine precision errors after subtraction
     image[np.where(image < 0)] = 0
@@ -60,7 +48,7 @@ def normxclorr2(template, image, mode="full"):
     return out
 
 # Pytorch implementation of above function
-def normxclorr_pt(template, image, padding="same"):
+def normxcorr_pt(template, image, padding="same"):
 
     template = template - torch.mean(template)
     image = image - torch.mean(image)
@@ -93,7 +81,7 @@ def normxclorr_pt(template, image, padding="same"):
     return out
 
 # Pytorch implementation of normxclorr, batching multiple kernels and images to be run simultaniously
-def normxclorr_pt_many(template, image, n_filters):
+def normxcorr_pt_many(template, image, n_filters):
 
     n_batches = image.shape[0]
 
@@ -138,15 +126,37 @@ def normxclorr_pt_many(template, image, n_filters):
 
     return out
 
-def get_similarity(print_, shoe, device="cpu", gpu_fix=True):
+def get_similarity(print_, shoe):
 
     # Crop arrays by 2 pixels/edge to remove edge artifacts
     print_ = print_[:, 2:-2, 2:-2]
+    shoe = shoe[:, 2:-2, 2:-2]
 
-    if device == "gpu":
-        shoe = shoe[:, :, 2:-2, 2:-2]
-    else:
-        shoe = shoe[:, 2:-2, 2:-2]
+    # Number of filters for both shoe and print
+    n_filters = len(print_)
+
+    # Useful if using "full" padding
+    # shape = (shoe.shape[0], shoe.shape[1] + print_.shape[1] -1, shoe.shape[2] + print_.shape[2] -1)
+    # ncc_array = np.zeros(shape)
+    ncc_array = np.zeros(shoe.shape)
+
+    for index in range(n_filters):
+        print_filter = print_[index]
+        shoe_filter = shoe[index]
+
+        ncc_array[index] = normxcorr(print_filter, shoe_filter, "same")
+
+    ncc_array = np.sum(ncc_array, axis=0)
+
+    similarity = np.max(ncc_array) / n_filters
+
+    return similarity
+
+def get_similarity_gpu(print_, shoe, gpu_fix=True):
+
+    print_ = print_[:, 2:-2, 2:-2]
+
+    shoe = shoe[:, :, 2:-2, 2:-2]
 
     # Number of filters for both shoe and print
     n_filters = len(print_)
@@ -155,85 +165,32 @@ def get_similarity(print_, shoe, device="cpu", gpu_fix=True):
     # Dimensions of print filters
     template_dims = print_[0].shape
 
+    # Very ugly hack, should not be necessary on GPUs actually supported by PyTorch
+    # Pad height if one of the values that results in a corrupted FFT convolution
+    if gpu_fix == True:
+        broken_heights = [1, 8, 9, 16, 22, 29, 30, 33, 36, 41, 48, 50, 57, 61, 63, 67, 71, 74, 78, 84, 85, 87, 96]
+        new_height = print_.shape[1]
+        while new_height in broken_heights:
+            new_height += 1
+        if new_height != print_.shape[1]:
+            number_zeros = new_height - print_.shape[1]
+            print_ = F.pad(print_, (0, 0, number_zeros, 0), "constant", 0)
+            template_dims = print_[0].shape
 
-    # if debug:
-    #     # print_test = print_[0].cpu().numpy()
-    #     # shoe_test = shoe[0].cpu().numpy()
-    #     # test = normxclorr_pt(print_test, shoe_test)
+    # Since we're doing depthwise convolution, out_channels = in_channels = num_channels
+    # and groups = num_channels, so in_channels/groups = 1
+    print_ = print_.reshape(n_filters, 1, template_dims[0], template_dims[1])
 
-    #     # ipdb.set_trace()
-    #     ncc_array_np = np.zeros(shoe.shape)
-    #     ncc_array_pt = torch.zeros(shoe.shape)
-    #     for index in range(n_filters):
-    #         print_filter = print_[index]
-    #         shoe_filter = shoe[index]
+    # Calculate NCC for all given shoes
+    ncc_array = normxcorr_pt_many(print_, shoe, n_filters)
 
-    #         ncc_array_np[index] = normxclorr2(print_filter.numpy(), shoe_filter.numpy(), "same")
-    #         ncc_array_pt[index] = normxclorr_pt(print_filter, shoe_filter, "same").squeeze()
+    # Sum values for each shoe
+    sum_ncc = torch.sum(ncc_array, dim=1)
 
-    #     ncc_array_np_sum = np.sum(ncc_array_np, axis=0)
-    #     ncc_array_pt_sum = torch.sum(ncc_array_pt, dim=0)
-
-    #     np_sim = np.max(ncc_array_np_sum) / n_filters
-    #     pt_sim = torch.max(ncc_array_pt_sum) / n_filters
-
-    #     # test = normxclorr2(print_test, shoe_test, "same")
-    #     # test2 = normxclorr_pt(print_[0], shoe[0], "same")
-
-    #     # print(pt_sim - np_sim)
-
-    #     if np.sqrt((pt_sim - np_sim)**2) > 0.001:
-    #         # test_np = normxclorr2(print_[0].numpy(), shoe[0].numpy(), "same")
-    #         test_pt = normxclorr_pt(print_[0], shoe[0], "same")
-    #         print(f"{print_[0].shape} : {shoe[0].shape}")
-
-    if device == "gpu":
-
-        # Very ugly hack, should not be necessary on GPUs actually supported by PyTorch
-        # Pad height if one of the values that results in a corrupted FFT convolution
-        if gpu_fix == True:
-            broken_heights = [1, 8, 9, 16, 22, 29, 30, 33, 36, 41, 48, 50, 57, 61, 63, 67, 71, 74, 78, 84, 85, 87, 96]
-            new_height = print_.shape[1]
-            while new_height in broken_heights:
-                new_height += 1
-            if new_height != print_.shape[1]:
-                number_zeros = new_height - print_.shape[1]
-                print_ = F.pad(print_, (0, 0, number_zeros, 0), "constant", 0)
-                template_dims = print_[0].shape
-
-        # Since we're doing depthwise convolution, out_channels = in_channels = num_channels
-        # and groups = num_channels, so in_channels/groups = 1
-        print_ = print_.reshape(n_filters, 1, template_dims[0], template_dims[1])
-
-        # Calculate NCC for all given shoes
-        ncc_array = normxclorr_pt_many(print_, shoe, n_filters)
-
-        # Sum values for each shoe
-        sum_ncc = torch.sum(ncc_array, dim=1)
-
-        # Calculate similarity for each individual shoe
-        n_shoes = len(shoe)
-        similarity = torch.zeros(n_shoes)
-        for i in range(n_shoes):
-            similarity[i] = torch.max(sum_ncc[i]) / n_filters
-
-
-    elif device == "cpu":
-
-        ncc_array = np.zeros(shoe.shape)
-
-        for index in range(n_filters):
-            print_filter = print_[index]
-            shoe_filter = shoe[index]
-
-            ncc_array[index] = normxclorr2(print_filter, shoe_filter, "same")
-
-        ncc_array = np.sum(ncc_array, axis=0)
-
-        similarity = np.max(ncc_array) / n_filters
-
-    else:
-        raise NotImplementedError(f"Device {device} not implemented")
-
+    # Calculate similarity for each individual shoe
+    n_shoes = len(shoe)
+    similarity = torch.zeros(n_shoes)
+    for i in range(n_shoes):
+        similarity[i] = torch.max(sum_ncc[i]) / n_filters
 
     return similarity

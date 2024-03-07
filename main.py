@@ -8,11 +8,14 @@ from tqdm import tqdm
 import time
 import sys
 
+from PIL import Image
+from scipy import ndimage
+
 # GPU
 import torch
 
 # CPU
-from multiprocessing import Array, Process, Value, Lock, Queue
+from multiprocessing import Array, Process, Value, Queue
 
 import ipdb
 
@@ -30,10 +33,9 @@ from Networks.network_pt import Model
 
 # ------ Similarity Measures ------
 
-from Similarities.ncc import get_similarity
+from Similarities.ncc import get_similarity, get_similarity_gpu
 # from Similarities.orb import get_similarity
 # from Similarities.dim import get_similarity
-
 
 def load_images(dir):
     """
@@ -72,17 +74,7 @@ def get_all_filters(images, model):
     # Return conv filters
     return image_filters
 
-# def memory_map(arr, name):
-#     folder = "Memmaps"
-#     filename = os.path.join(folder, name)
-#     if os.path.exists(filename): os.unlink(filename)
-#     _ = dump(arr, filename)
-
-#     mmap = load(filename, mmap_mode='r')
-
-#     return mmap
-
-# TODO load mmaps if already exist?
+# TODO save numpy arrays to NPZ so they dont have to be calculated if restarting python
 def initialise_data(data_dir):
     """
     Load all required state for testing.
@@ -113,6 +105,7 @@ def initialise_data(data_dir):
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 27)
     model = Model("EfficientNetV2_M", 4)
+    # model = Model("EfficientNetV2_M", 5)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)
 
@@ -124,12 +117,6 @@ def initialise_data(data_dir):
     print("Calculating convolutional filters for shoes")
     shoe_filters = get_all_filters(shoe_images, model)
 
-
-    # print_filters = [memory_map(print_, f"print_{id}") for id, print_ in enumerate(print_filters)]
-    # shoe_filters = [memory_map(shoe, f"shoe_{id}") for id, shoe in enumerate(shoe_filters)]
-
-
-    # gc.collect()
     return (print_filters, shoe_filters, matching_pairs)
 
 def write_csv(filename, rankings):
@@ -152,32 +139,91 @@ def get_rank(similarities, matching_pairs, print_id):
 
     return rank
 
-def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, counter, queue):
+def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, counter, queue, rotations, scales):
 
     for i in range(len(shoe_filters)):
         shoe_filters[i] = np.frombuffer(shoe_filters[i][0].get_obj(), dtype=np.float32).reshape(shoe_filters[i][1])
 
-    # Use the range of print_ids passed to the worker as the id of print_
-    for print_, print_id in zip(print_filters, range(*print_ids)):
+    rotated_prints_arr = [print_filters]
 
-        similarities = []
-        for shoe in shoe_filters:
+    for s in scales:
+        new_prints = []
 
-            sim = get_similarity(print_, shoe, device="cpu")
+        for print in print_filters:
+            new_print = []
 
-            similarities.append(sim)
+            for filter in print:
+                filter = Image.fromarray(filter)
+                filter = filter.resize((int(filter.width * s), int(filter.height * s)))
 
-        rank = get_rank(similarities, matching_pairs, print_id)
+                new_print.append(filter)
 
-        rankings[print_id] = rank
+            new_prints.append(np.array(new_print))
 
-        with counter.get_lock():
-            counter.value += 1
+        rotated_prints_arr.append(new_prints)
 
-        queue.put(f"Print {print_id+1} true match ranked {rank}")
+    for r in rotations:
+
+        new_prints = []
+
+        for print_ in print_filters:
+            new_prints.append(ndimage.rotate(print_, r, axes=(1, 2)))
+
+        rotated_prints_arr.append(new_prints)
 
 
-def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, gpu_fix=True):
+    # similarities_all = np.zeros((len(print_filters), len(shoe_filters)))
+
+    for rotated_prints in rotated_prints_arr:
+
+        for print_id, print_ in zip(range(*print_ids), rotated_prints):
+            # TODO remove this to simulate IRL
+            if rankings[print_id] < 10 and rankings[print_id] != 0:
+                with counter.get_lock():
+                    counter.value += 1
+                continue
+
+            similarities = []
+            for shoe in shoe_filters:
+                sim = get_similarity(print_, shoe)
+
+                similarities.append(sim)
+
+            rank = get_rank(similarities, matching_pairs, print_id)
+
+            if rank < rankings[print_id] or rankings[print_id] == 0:
+                extra = ""
+                if rankings[print_id] != 0:
+                    extra = f", increased from previous rank {rankings[print_id]}"
+
+                rankings[print_id] = rank
+
+                queue.put(f"Print {print_id+1} true match ranked {rank}{extra}")
+
+            # print_index = id_to_index(print_id, print_ids)
+            # for shoe_id, similarity in enumerate(similarities):
+            #     if similarity > similarities_all[print_index, shoe_id]:
+            #         similarities_all[print_index, shoe_id] = similarity
+
+            with counter.get_lock():
+                counter.value += 1
+
+        # sorted =  np.flip(np.argsort(max_similarities))
+
+        # extra = ""
+        # if max_rank != 1:
+        #     extra = f" (incorrectly matched shoe {sorted[0] + 1}, correct is {matching_pairs[print_id+1]})"
+
+    # for print_id, similarities in zip(range(*print_ids), similarities_all):
+
+    #     rank = get_rank(similarities, matching_pairs, print_id)
+    #     rankings[print_id] = rank
+    #     queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[rank-1]}")
+
+
+
+
+def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, rotations=[-9, -3, 3, 9], scales=[0.9, 1.1], gpu_fix=True):
     """
     Compare each print to every shoe, generating a probability score.
     The scores are used to calculate the ranking of the true match between a print and shoe in comparison to the other shoes.
@@ -224,7 +270,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
             for shoe in shoe_filters:
 
-                new_sims = get_similarity(print_, shoe.unsqueeze(0), device="gpu", gpu_fix=gpu_fix).numpy()
+                new_sims = get_similarity_gpu(print_, shoe.unsqueeze(0), gpu_fix=gpu_fix).numpy()
                 for sim in new_sims:
                     similarities.append(sim)
 
@@ -281,18 +327,19 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
             shoe_shared.append((shared, shape))
 
         # Debug
-        # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue)
+        # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue, rotations=[], scales=[])
 
         # Spawn each process
         processes = []
         for i in range(n_processes):
-            p = Process(target=worker, args=(chunks[i], shoe_shared, print_ids[i], matching_pairs, rankings, counter, queue))
+            p = Process(target=worker, args=(chunks[i], shoe_shared, print_ids[i], matching_pairs, rankings, counter, queue, rotations, scales))
             processes.append(p)
             p.start()
 
         # Update tqdm progress bar with values in queue and counter
-        with tqdm(total=n_prints, file=sys.stdout) as pbar:
-            while counter.value < n_prints: #pyright: ignore
+        work = (n_prints * len(rotations)) + (n_prints * len(scales)) + n_prints
+        with tqdm(total=work) as pbar:
+            while counter.value < work: #pyright: ignore
                 while not queue.empty():
                     message = queue.get()
                     pbar.write(message)
@@ -303,8 +350,9 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
                 time.sleep(1)
 
             pbar.update(counter.value - pbar.n) #pyright: ignore
-
-
+            while not queue.empty():
+                message = queue.get()
+                pbar.write(message)
 
 
         # Join processes to ensure they have all terminated
