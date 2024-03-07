@@ -34,6 +34,7 @@ def normxcorr(template, image, mode="same"):
 
     out = convolve(image, ar, mode=mode)
 
+    # TODO try simplistic algorithm and see how much of a difference it makes
     image = convolve(np.square(image), a1, mode=mode) - \
             np.square(convolve(image, a1, mode=mode)) / (np.prod(template.shape))
 

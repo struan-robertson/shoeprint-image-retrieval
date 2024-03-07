@@ -144,15 +144,15 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
     for i in range(len(shoe_filters)):
         shoe_filters[i] = np.frombuffer(shoe_filters[i][0].get_obj(), dtype=np.float32).reshape(shoe_filters[i][1])
 
-    rotated_prints_arr = [print_filters]
+    scaled_prints_arr = [print_filters]
 
     for s in scales:
         new_prints = []
 
-        for print in print_filters:
+        for print_ in print_filters:
             new_print = []
 
-            for filter in print:
+            for filter in print_:
                 filter = Image.fromarray(filter)
                 filter = filter.resize((int(filter.width * s), int(filter.height * s)))
 
@@ -160,21 +160,23 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
             new_prints.append(np.array(new_print))
 
-        rotated_prints_arr.append(new_prints)
+        scaled_prints_arr.append(new_prints)
+
+    transformed_prints_arr = scaled_prints_arr.copy()
 
     for r in rotations:
 
-        new_prints = []
+        for scaled_arr in scaled_prints_arr:
+            new_prints = []
 
-        for print_ in print_filters:
-            new_prints.append(ndimage.rotate(print_, r, axes=(1, 2)))
+            for print_ in scaled_arr:
+                new_prints.append(ndimage.rotate(print_, r, axes=(1, 2)))
 
-        rotated_prints_arr.append(new_prints)
+            transformed_prints_arr.append(new_prints)
 
+    similarities_all = np.zeros((len(print_filters), len(shoe_filters)))
 
-    # similarities_all = np.zeros((len(print_filters), len(shoe_filters)))
-
-    for rotated_prints in rotated_prints_arr:
+    for rotated_prints in transformed_prints_arr:
 
         for print_id, print_ in zip(range(*print_ids), rotated_prints):
             # TODO remove this to simulate IRL
@@ -189,21 +191,21 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
                 similarities.append(sim)
 
-            rank = get_rank(similarities, matching_pairs, print_id)
+            # rank = get_rank(similarities, matching_pairs, print_id)
 
-            if rank < rankings[print_id] or rankings[print_id] == 0:
-                extra = ""
-                if rankings[print_id] != 0:
-                    extra = f", increased from previous rank {rankings[print_id]}"
+            # if rank < rankings[print_id] or rankings[print_id] == 0:
+            #     extra = ""
+            #     if rankings[print_id] != 0:
+            #         extra = f", increased from previous rank {rankings[print_id]}"
 
-                rankings[print_id] = rank
+            #     rankings[print_id] = rank
 
-                queue.put(f"Print {print_id+1} true match ranked {rank}{extra}")
+            #     queue.put(f"Print {print_id+1} true match ranked {rank}{extra}")
 
-            # print_index = id_to_index(print_id, print_ids)
-            # for shoe_id, similarity in enumerate(similarities):
-            #     if similarity > similarities_all[print_index, shoe_id]:
-            #         similarities_all[print_index, shoe_id] = similarity
+            print_index = print_id - print_ids[0]
+            for shoe_id, similarity in enumerate(similarities):
+                if similarity > similarities_all[print_index, shoe_id]:
+                    similarities_all[print_index, shoe_id] = similarity
 
             with counter.get_lock():
                 counter.value += 1
@@ -214,16 +216,16 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
         # if max_rank != 1:
         #     extra = f" (incorrectly matched shoe {sorted[0] + 1}, correct is {matching_pairs[print_id+1]})"
 
-    # for print_id, similarities in zip(range(*print_ids), similarities_all):
+    for print_id, similarities in zip(range(*print_ids), similarities_all):
 
-    #     rank = get_rank(similarities, matching_pairs, print_id)
-    #     rankings[print_id] = rank
-    #     queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[rank-1]}")
-
-
+        rank = get_rank(similarities, matching_pairs, print_id)
+        rankings[print_id] = rank
+        queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[rank-1]}")
 
 
-def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, rotations=[-9, -3, 3, 9], scales=[0.9, 1.1], gpu_fix=True):
+
+
+def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, rotations=[-9, -3, 3, 9], scales=[0.96, 1.04], gpu_fix=True):
     """
     Compare each print to every shoe, generating a probability score.
     The scores are used to calculate the ranking of the true match between a print and shoe in comparison to the other shoes.
@@ -327,7 +329,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
             shoe_shared.append((shared, shape))
 
         # Debug
-        # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue, rotations=[], scales=[])
+        # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue, rotations=rotations, scales=scales)
 
         # Spawn each process
         processes = []
@@ -337,7 +339,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
             p.start()
 
         # Update tqdm progress bar with values in queue and counter
-        work = (n_prints * len(rotations)) + (n_prints * len(scales)) + n_prints
+        work = (len(rotations)+1) * (len(scales)+1) * n_prints
         with tqdm(total=work) as pbar:
             while counter.value < work: #pyright: ignore
                 while not queue.empty():
