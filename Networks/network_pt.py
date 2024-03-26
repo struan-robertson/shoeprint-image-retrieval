@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from typing import Tuple
+import ipdb
 import numpy as np
 import cv2
 from PIL import Image
@@ -32,6 +33,18 @@ def get_transforms(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
 
     return torchvision_transforms
 
+def get_transforms_rgb(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
+    torchvision_transforms = transforms.Compose(
+        [
+            # Convert image from numpy array to tensor
+            # This automatically normalises the image to the range [0, 1]
+            transforms.ToTensor(),
+            # Normalize to same values used by pytorch when training on ImageNet
+            transforms.Normalize(mean, std),
+        ]
+    )
+
+    return torchvision_transforms
 
 class Model:
     def __init__(
@@ -61,6 +74,7 @@ class Model:
         if model_str == "VGG19":
             model = models.vgg19(weights='IMAGENET1K_V1')
             transform = get_transforms()
+            transform_rgb = get_transforms_rgb()
         elif model_str == "VGG16":
             model = models.vgg16(weights='IMAGENET1K_FEATURES')
             transform = get_transforms(mean=[0.48235, 0.45882, 0.40784], std=[0.00392156862745098, 0.00392156862745098, 0.00392156862745098])
@@ -97,11 +111,13 @@ class Model:
         elif model_str == "EfficientNet_B7":
             model = models.efficientnet_b7(weights="IMAGENET1K_V1")
             transform = get_transforms()
+            transform_rgb = get_transforms_rgb()
         elif model_str == "EfficientNetV2_S":
             model = models.efficientnet_v2_s(weights="IMAGENET1K_V1")
             transform = get_transforms()
         elif model_str == "EfficientNetV2_M":
             model = models.efficientnet_v2_m(weights="IMAGENET1K_V1")
+            transform_rgb = get_transforms_rgb()
             transform = get_transforms()
         elif model_str == "EfficientNetV2_L":
             model = models.efficientnet_v2_l(weights="IMAGENET1K_V1")
@@ -128,7 +144,6 @@ class Model:
         # model.load_state_dict(state_dict)
 
 
-        import ipdb; ipdb.set_trace()
 
         model = list(model.features.children())[:layers]  # pyright: ignore
 
@@ -147,6 +162,20 @@ class Model:
 
         self.model = model
         self.transform = transform
+        self.transform_rgb = transform_rgb
+
+    # Handle RGB aswel as grayscale
+    def _clahe(self, img):
+        if img.ndim == 3:
+            lab_img = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+            l_channel, a_channel, b_channel = cv2.split(lab_img)
+            clahe_l_channel = self.clahe.apply(l_channel)
+            clahe_lab_image = cv2.merge((clahe_l_channel, a_channel, b_channel))
+            img = cv2.cvtColor(clahe_lab_image, cv2.COLOR_LAB2RGB)
+        else:
+            img = self.clahe.apply(img)
+
+        return img
 
 
     def __get_activation__(self, name):
@@ -172,11 +201,13 @@ class Model:
             np.ndarray: Array of feature maps calculated from image.
         """
 
-        # Apply CLAHE
-        img = self.clahe.apply(img)
+        img = self._clahe(img)
 
         # Image pre-processing
-        input_tensor = self.transform(img)
+        if img.ndim == 3:
+            input_tensor = self.transform_rgb(img)
+        else:
+            input_tensor = self.transform(img)
 
         # Add a batch dimension
         input_batch = input_tensor.unsqueeze(0)
