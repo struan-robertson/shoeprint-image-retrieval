@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import csv
+import ipdb
 
 total_references = 87
 total_shoes = 208
+# total_shoes = 139
+# total_shoes = 70
 
 def load_results(results_file):
     rankings = []
@@ -15,6 +18,7 @@ def load_results(results_file):
     return rankings
 
 def cmp(rankings, p):
+
     total_sum = 0
 
     for rank in rankings:

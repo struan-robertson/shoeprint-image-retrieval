@@ -105,6 +105,7 @@ def initialise_data(data_dir):
 
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 27)
+    # model = Model()
     model = Model("EfficientNetV2_M", 4)
     # model = Model("EfficientNetV2_M", 5)
     # model = Model("EfficientNetV2_M", 1)
@@ -155,7 +156,16 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
     # scaled_prints_arr.append(mirrored_filters)
 
+    for r in rotations:
+        new_prints = []
+
+        for print_ in print_filters:
+            new_prints.append(ndimage.rotate(print_, r, axes=(1,2)))
+
+        scaled_prints_arr.append(new_prints)
+
     for s in scales:
+
         new_prints = []
 
         for print_ in print_filters:
@@ -171,21 +181,9 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
         scaled_prints_arr.append(new_prints)
 
-    transformed_prints_arr = scaled_prints_arr.copy()
-
-    for r in rotations:
-
-        for scaled_arr in scaled_prints_arr:
-            new_prints = []
-
-            for print_ in scaled_arr:
-                new_prints.append(ndimage.rotate(print_, r, axes=(1, 2)))
-
-            transformed_prints_arr.append(new_prints)
-
     similarities_all = np.zeros((len(print_filters), len(shoe_filters)))
 
-    for rotated_prints in transformed_prints_arr:
+    for rotated_prints in scaled_prints_arr:
 
         for print_id, print_ in zip(range(*print_ids), rotated_prints):
             # TODO remove this to simulate IRL
@@ -350,7 +348,8 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
             p.start()
 
         # Update tqdm progress bar with values in queue and counter
-        work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
+        # work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
+        work = (len(rotations) + len(scales) + 1) * n_prints #* 2
         with tqdm(total=work) as pbar:
             while counter.value < work: #pyright: ignore
                 while not queue.empty():
