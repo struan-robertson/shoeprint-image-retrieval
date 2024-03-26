@@ -2,8 +2,8 @@
 
 import csv
 
-total_references = 1175
-total_shoes = 300
+total_references = 87
+total_shoes = 208
 
 def load_results(results_file):
     rankings = []

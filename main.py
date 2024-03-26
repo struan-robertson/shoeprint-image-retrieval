@@ -50,14 +50,16 @@ def load_images(dir):
 
     # Load all images into list
     images = []
+    ids = []
     for image_file in image_files:
         img_path = os.path.join(dir, image_file)
         img = Image.open(img_path)  # Convert to grayscale
         img_array = np.array(img)
         images.append(img_array)
+        ids.append(int(image_file[:3]))
 
     # Return list of images in directory
-    return images
+    return images, ids
 
 def get_all_filters(images, model):
     """
@@ -84,23 +86,22 @@ def initialise_data(data_dir):
     """
 
     # Directories containing images
-    print_dir = os.path.join(data_dir, "tracks_cropped")
-    shoe_dir = os.path.join(data_dir, "references")
+    print_dir = os.path.join(data_dir, "Query")
+    shoe_dir = os.path.join(data_dir, "Gallery")
 
     # Load images in print directory
-    print_images = load_images(print_dir)
+    print_images, print_ids = load_images(print_dir)
     print("Loaded ", len(print_images), " prints")
 
     # Load images in shoe directory
-    shoe_images = load_images(shoe_dir)
+    shoe_images, shoe_ids = load_images(shoe_dir)
     print("Loaded ", len(shoe_images), " shoes")
 
-    # Load matching pairs from csv tabke into dictionary
-    matching_pairs = {}
-    with open(os.path.join(data_dir, "label_table.csv"), 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            matching_pairs[int(row[0])] = int(row[1])
+    # Note that there is a many to one relationship between query shoemark and gallery shoeprint in WVU2019
+    # Get index of corresponding shoeprint from the index of a shoemark
+    matching_pairs = []
+    for print_id in print_ids:
+        matching_pairs.append(shoe_ids.index(print_id))
 
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 27)
@@ -135,7 +136,8 @@ def get_rank(similarities, matching_pairs, print_id):
     # Find the rank of the true match within the sorted array
     # matching_pairs[id+1] because the image id is equal to index + 1
     # Add 1 to the result as the resulting index calculated will be 1 less than the true rank
-    rank = np.where(sorted == (matching_pairs[print_id+1] -1))[0][0] +1
+    # rank = np.where(sorted == (matching_pairs[print_id+1] -1))[0][0] +1
+    rank = np.where(sorted == (matching_pairs[print_id]))[0][0] + 1
 
     return rank
 
@@ -227,7 +229,8 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
         rank = get_rank(similarities, matching_pairs, print_id)
         rankings[print_id] = rank
-        queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[rank-1]}")
+        # queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[print_id]}")
+        queue.put(f"Print {print_id} true match ranked {rank}")
 
 
 
@@ -337,6 +340,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
         # Debug
         # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue, rotations=rotations, scales=scales)
+
 
         # Spawn each process
         processes = []
