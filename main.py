@@ -106,8 +106,8 @@ def initialise_data(data_dir):
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 27)
     # model = Model()
-    model = Model("EfficientNetV2_M", 4)
-    # model = Model("EfficientNetV2_M", 5)
+    # model = Model("EfficientNetV2_M", 4)
+    model = Model("EfficientNetV2_M", 6)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)
 
