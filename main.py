@@ -54,7 +54,18 @@ def load_images(dir):
     for image_file in image_files:
         img_path = os.path.join(dir, image_file)
         img = Image.open(img_path)  # Convert to grayscale
-        img_array = np.array(img)
+
+        # Resize the image
+        new_width = int(img.width * 0.073394) # 0.1
+        new_height = int(img.height * 0.073394)
+
+        print(f"{new_height} x {new_width}")
+
+        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        img_array = np.array(img_resized)
+
+        # img_array = np.array(img)
+
         images.append(img_array)
         ids.append(int(image_file[:3]))
 
@@ -104,9 +115,11 @@ def initialise_data(data_dir):
         matching_pairs.append(shoe_ids.index(print_id))
 
     # model = Model("EfficientNet_B5", 7)
-    # model = Model("VGG19", 27)
+    # model = Model("VGG19", 36)
     # model = Model()
     # model = Model("EfficientNetV2_M", 4)
+    # model = Model("EfficientNetV2_S", 7)
+    # model = Model("EfficientNetV2_M", 6)
     model = Model("EfficientNetV2_M", 6)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)

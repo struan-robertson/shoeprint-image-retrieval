@@ -14,7 +14,7 @@ import timm
 
 """Module used to pick a PyTorch model and then calculate convolutional filters from it."""
 
-def printmodel(model, input=(1,3,222,265)):
+def printmodel(model, input=(1,3,1968,5872)):
     from torchinfo import summary
     print(summary(model, input))
 
@@ -78,6 +78,7 @@ class Model:
         elif model_str == "VGG16":
             model = models.vgg16(weights='IMAGENET1K_FEATURES')
             transform = get_transforms(mean=[0.48235, 0.45882, 0.40784], std=[0.00392156862745098, 0.00392156862745098, 0.00392156862745098])
+            transform_rgb = get_transforms_rgb(mean=[0.48235, 0.45882, 0.40784], std=[0.00392156862745098, 0.00392156862745098, 0.00392156862745098])
         elif model_str == "VGG16_Stylized":
             model = models.vgg16()
             state_dict = torch.load("./Networks/vgg16_train_60_epochs_lr0.01.pth")["state_dict"]
@@ -114,6 +115,7 @@ class Model:
             transform_rgb = get_transforms_rgb()
         elif model_str == "EfficientNetV2_S":
             model = models.efficientnet_v2_s(weights="IMAGENET1K_V1")
+            transform_rgb = get_transforms_rgb()
             transform = get_transforms()
         elif model_str == "EfficientNetV2_M":
             model = models.efficientnet_v2_m(weights="IMAGENET1K_V1")
@@ -137,14 +139,12 @@ class Model:
         #     transform = self.__timm_transform__
         #
 
-
-
         # state_dict = torch.load("../effnet-finetune/159000_1.8319744295621783.pth")
 
         # model.load_state_dict(state_dict)
 
 
-
+        # ipdb.set_trace()
         model = list(model.features.children())[:layers]  # pyright: ignore
 
         model = nn.Sequential(*model)
