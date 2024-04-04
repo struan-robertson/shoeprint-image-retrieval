@@ -56,12 +56,12 @@ def load_images(dir):
         img = Image.open(img_path)  # Convert to grayscale
 
         # Resize the image
-        new_width = int(img.width * 0.073394) # 0.1
-        new_height = int(img.height * 0.073394)
+        new_width = int(img.width * 0.137615) # 0.1
+        new_height = int(img.height * 0.137615)
 
         print(f"{new_height} x {new_width}")
 
-        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        img_resized = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
         img_array = np.array(img_resized)
 
         # img_array = np.array(img)
