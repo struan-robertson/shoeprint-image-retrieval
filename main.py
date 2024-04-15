@@ -56,8 +56,8 @@ def load_images(dir):
         img = Image.open(img_path)  # Convert to grayscale
 
         # Resize the image
-        new_width = int(img.width * 0.137615) # 0.1
-        new_height = int(img.height * 0.137615)
+        new_width = int(img.width * 0.1) # 0.1
+        new_height = int(img.height * 0.1)
 
         print(f"{new_height} x {new_width}")
 
@@ -67,7 +67,7 @@ def load_images(dir):
         # img_array = np.array(img)
 
         images.append(img_array)
-        ids.append(int(image_file[:3]))
+        ids.append(int(image_file.split('_')[0].split('.')[0]))
 
     # Return list of images in directory
     return images, ids
@@ -114,6 +114,7 @@ def initialise_data(data_dir):
     for print_id in print_ids:
         matching_pairs.append(shoe_ids.index(print_id))
 
+    ipdb.set_trace()
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 36)
     # model = Model()
