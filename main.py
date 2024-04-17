@@ -32,7 +32,7 @@ import ipdb
 # Uses Tensorflow
 # from Networks.vgg19_tf import get_filters
 
-from Networks.network_pt import Model
+from Networks.network_pt import Model, get_output_size
 
 # ------ Similarity Measures ------
 
@@ -54,8 +54,12 @@ def avg_img_size(dir):
     avg_height = total_height // len(image_files)
     return avg_width, avg_height
 
-def smallest_img(dir):
+def smallest_img_dir(dir):
     image_files = os.listdir(dir)
+
+    return smallest_img(image_files, dir)
+
+def smallest_img(image_files, dir):
 
     smallest_img_size = float('inf')
     smallest_img_name = None
@@ -74,6 +78,7 @@ def smallest_img(dir):
                 smallest_img_dims = (width, height)
 
     return smallest_img_name, smallest_img_dims
+
 
 def biggest_img(dir):
     image_files = os.listdir(dir)
@@ -111,7 +116,7 @@ def move_small_img(dir, smallest, destdir):
                 print(f"Moved {image_file}")
 
 
-def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter, minimum_img):
+def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter):
     # Load all images into list
     images = []
     ids = []
@@ -122,9 +127,6 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
         # Resize the image
         new_width = int(img.width * scale) # 0.1
         new_height = int(img.height * scale)
-
-        if new_height * new_width < minimum_img[0] * minimum_img[1]:
-            minimum_img[0:2] = [new_width, new_height]
 
         img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         img_array = np.array(img_resized)
@@ -175,14 +177,15 @@ def cluster_images_by_size(directory, n_clusters=5):
 
 
 
-def load_images(dir, scale, n_processes):
+def load_images(image_files, scale, n_processes):
     """
     Load images into an array, sorted by name.
     As the image name corresponds to its ID, the index of the returned array corresponds to the image ID - 1.
     """
 
     # List all files in the directory
-    image_files = os.listdir(dir)
+    # image_files = os.listdir(dir)
+
     # Sort by name
     image_files.sort()
 
@@ -203,34 +206,31 @@ def load_images(dir, scale, n_processes):
     ids = manager.list(range(len(image_files)))
 
     counter = Value('i', 0)
-    minimum_img = Array('i', [999999, 999999])
 
     processes = []
     for i in range(n_processes):
-        p = Process(target=image_load_worker, args=(chunks[i], scale, dir, indexes[i], images, ids, counter, minimum_img))
+        p = Process(target=image_load_worker, args=(chunks[i], scale, dir, indexes[i], images, ids, counter))
         processes.append(p)
         p.start()
 
     with tqdm(total=len(image_files)) as pbar:
-        while counter.value < len(image_files):
-            pbar.update(counter.value - pbar.n)
+        while counter.value < len(image_files): #pyright: ignore
+            pbar.update(counter.value - pbar.n) #pyright: ignore
             pbar.refresh()
 
             time.sleep(1)
 
-        pbar.update(counter.value - pbar.n)
+        pbar.update(counter.value - pbar.n) #pyright: ignore
 
     for p in processes:
         p.join()
-
-    print(f"Smallest file has a size of {minimum_img[0]}x{minimum_img[1]}")
 
     # images is list of image files _in order of name_
     # important that gallery images are stored in the array correctly
     # ids contains the id of said image
 
     # Return list of images in directory
-    return images, ids, minimum_img
+    return images, ids
 
 def get_all_filters(images, model):
     """
@@ -247,8 +247,20 @@ def get_all_filters(images, model):
     # Return conv filters
     return image_filters
 
+def find_best_scale(model, initial_size):
+    # get size of feature maps un-modified
+    unmodified = get_output_size(model, initial_size)
+
+    # width is always smallest (in correctly oriented shoeprint images) so calculate based on that
+    ideal_minimum_featuremap_width = 15
+
+    scale = ideal_minimum_featuremap_width / unmodified[2]
+
+    return scale
+
+
 # TODO save numpy arrays to NPZ so they dont have to be calculated if restarting python
-def initialise_data(data_dir, scale, n_processes):
+def orchestrate(data_dir, n_processes):
     """
     Load all required state for testing.
     Loads:
@@ -260,20 +272,9 @@ def initialise_data(data_dir, scale, n_processes):
     print_dir = os.path.join(data_dir, "Query")
     shoe_dir = os.path.join(data_dir, "Gallery")
 
-    # Load images in print directory
-    print_images, print_ids, min_print_img = load_images(print_dir, scale, n_processes)
-    print("Loaded ", len(print_images), " prints")
+    shoe_files = os.listdir(shoe_dir)
 
-    # Load images in shoe directory
-    shoe_images, shoe_ids, _ = load_images(shoe_dir, scale, n_processes)
-    print("Loaded ", len(shoe_images), " shoes")
-
-
-    # Note that there is a many to one relationship between query shoemark and gallery shoeprint in WVU2019
-    # Get index of corresponding shoeprint from the index of a shoemark
-    matching_pairs = []
-    for print_id in print_ids:
-        matching_pairs.append(shoe_ids.index(print_id))
+    clustered = cluster_images_by_size(print_dir, 5)
 
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 36)
@@ -281,19 +282,46 @@ def initialise_data(data_dir, scale, n_processes):
     # model = Model("EfficientNetV2_M", 4)
     # model = Model("EfficientNetV2_S", 7)
     # model = Model("EfficientNetV2_M", 6)
-    model = Model("EfficientNetV2_M", 4)
+    model = Model("EfficientNetV2_M", 5)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)
 
-    # Calculate conv filters for print images
-    print("Calculating convolutional filters for prints")
-    print_filters = get_all_filters(print_images, model)
+    ranks = []
 
-    # Calculate conv filters for shoe images
-    print("Calculating convolutional filters for shoes")
-    shoe_filters = get_all_filters(shoe_images, model)
+    for cluster in clustered.items():
+        cluster = cluster[1]
+        smallest = smallest_img(cluster, print_dir)[1]
 
-    return (print_filters, shoe_filters, matching_pairs)
+        scale = find_best_scale(model, (1, 3, smallest[0], smallest[1]))
+
+        # Load images in print directory
+        print_images, print_ids = load_images(cluster, scale, n_processes)
+        print("Loaded ", len(cluster), " prints")
+
+        # Load images in shoe directory
+        shoe_images, shoe_ids = load_images(shoe_files, scale, n_processes)
+        print("Loaded ", len(shoe_files), " shoes")
+
+        # Note that there is a many to one relationship between query shoemark and gallery shoeprint in WVU2019
+        # Get index of corresponding shoeprint from the index of a shoemark
+        matching_pairs = []
+        for print_id in print_ids:
+            matching_pairs.append(shoe_ids.index(print_id))
+
+        # Calculate conv filters for print images
+        print("Calculating convolutional filters for prints")
+        print_filters = get_all_filters(print_images, model)
+
+        # Calculate conv filters for shoe images
+        print("Calculating convolutional filters for shoes")
+        shoe_filters = get_all_filters(shoe_images, model)
+
+        cluster_ranks = compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=n_processes, rotations=[], scales=[])
+
+        ranks += cluster_ranks
+
+    return ranks
+    # return (print_filters, shoe_filters, matching_pairs)
 
 def write_csv(filename, rankings):
     with open(f'Results/{filename}', 'w', newline='') as file:
