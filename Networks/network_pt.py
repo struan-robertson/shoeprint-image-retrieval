@@ -18,6 +18,12 @@ def printmodel(model, input=(1,3,1968,5872)):
     from torchinfo import summary
     print(summary(model, input))
 
+def get_output_size(model, input):
+    input = torch.randn(input).cuda()
+    with torch.no_grad():
+        output = model.model(input)
+    return output.shape
+
 def get_transforms(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     torchvision_transforms = transforms.Compose(
         [
