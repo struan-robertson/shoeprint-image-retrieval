@@ -49,6 +49,7 @@
             joblib
             matplotlib
             timm
+            scikit-learn
 
             # Dev requirements
             ipython

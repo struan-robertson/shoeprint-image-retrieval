@@ -11,6 +11,7 @@ import sys
 
 from PIL import Image
 from scipy import ndimage
+from sklearn.cluster import KMeans
 
 # GPU
 import torch
@@ -137,6 +138,42 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
 
     image_list[indexes[0]:indexes[1]] = images
     id_list[indexes[0]:indexes[1]] = ids
+
+
+def cluster_images_by_size(directory, n_clusters=5):
+    image_sizes = []
+    filenames = []
+
+    # Iterate over files in the directory
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+
+        # Check if the file is an image
+        if os.path.isfile(filepath) and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            # Open the image using PIL
+            with Image.open(filepath) as img:
+                # Get the dimensions of the image
+                width, height = img.size
+                image_sizes.append([width, height])
+                filenames.append(filename)
+
+    # Perform k-means clustering
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(image_sizes)
+
+    # Get the cluster labels for each image
+    labels = kmeans.labels_
+
+    # Group images by cluster label
+    clusters = {}
+    for i, label in enumerate(labels):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(filenames[i])
+
+    return clusters
+
+
 
 def load_images(dir, scale, n_processes):
     """
