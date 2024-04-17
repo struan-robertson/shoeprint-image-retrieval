@@ -144,7 +144,7 @@ class Model:
         # model.load_state_dict(state_dict)
 
 
-        # ipdb.set_trace()
+        ipdb.set_trace()
         model = list(model.features.children())[:layers]  # pyright: ignore
 
         model = nn.Sequential(*model)

@@ -3,8 +3,9 @@
 import csv
 import ipdb
 
-total_references = 87
-total_prints = 190
+total_references = 300
+# total_prints = 2292
+total_prints = 1867
 # total_prints = 51
 
 def load_results(results_file):
