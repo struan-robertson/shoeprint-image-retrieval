@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 from PIL import Image
 import numpy as np
 np.seterr(divide='ignore', invalid='ignore')
@@ -15,7 +16,8 @@ from scipy import ndimage
 import torch
 
 # CPU
-from multiprocessing import Array, Process, Value, Queue
+from multiprocessing import Array, Process, Value, Queue, Manager
+from ctypes import c_wchar_p
 
 import ipdb
 
@@ -37,7 +39,106 @@ from Similarities.ncc import get_similarity, get_similarity_gpu
 # from Similarities.orb import get_similarity
 # from Similarities.dim import get_similarity
 
-def load_images(dir):
+def avg_img_size(dir):
+    image_files = os.listdir(dir)
+    total_width = 0
+    total_height = 0
+    for image_file in image_files:
+        img_path = os.path.join(dir, image_file)
+        with Image.open(img_path) as img:
+            width, height = img.size
+            total_width += width
+            total_height += height
+    avg_width = total_width // len(image_files)
+    avg_height = total_height // len(image_files)
+    return avg_width, avg_height
+
+def smallest_img(dir):
+    image_files = os.listdir(dir)
+
+    smallest_img_size = float('inf')
+    smallest_img_name = None
+    smallest_img_dims = (0,0)
+
+    for image_file in image_files:
+        img_path = os.path.join(dir, image_file)
+
+        with Image.open(img_path) as img:
+            width, height = img.size
+            image_size = width * height
+
+            if image_size < smallest_img_size:
+                smallest_img_name = image_file
+                smallest_img_size = image_size
+                smallest_img_dims = (width, height)
+
+    return smallest_img_name, smallest_img_dims
+
+def biggest_img(dir):
+    image_files = os.listdir(dir)
+
+    biggest_img_size = float(0)
+    biggest_img_name = None
+    biggest_img_dims = (0,0)
+
+    for image_file in image_files:
+        img_path = os.path.join(dir, image_file)
+
+        with Image.open(img_path) as img:
+            width, height = img.size
+            image_size = width * height
+
+            if image_size > biggest_img_size:
+                biggest_img_name = image_file
+                biggest_img_size = image_size
+                biggest_img_dims = (width, height)
+
+    return biggest_img_name, biggest_img_dims
+
+def move_small_img(dir, smallest, destdir):
+
+    image_files = os.listdir(dir)
+
+    for image_file in image_files:
+        img_path = os.path.join(dir, image_file)
+
+        with Image.open(img_path) as img:
+            width, height = img.size
+
+            if width < smallest[0] or height < smallest[1]:
+                shutil.move(img_path, destdir)
+                print(f"Moved {image_file}")
+
+
+def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter, minimum_img):
+    # Load all images into list
+    images = []
+    ids = []
+    for image_file in image_files:
+        img_path = os.path.join(dir, image_file)
+        img = Image.open(img_path)  # Convert to grayscale
+
+        # Resize the image
+        new_width = int(img.width * scale) # 0.1
+        new_height = int(img.height * scale)
+
+        if new_height * new_width < minimum_img[0] * minimum_img[1]:
+            minimum_img[0:2] = [new_width, new_height]
+
+        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        img_array = np.array(img_resized)
+
+        images.append(img_array)
+        ids.append(int(image_file.split('_')[0].split('.')[0]))
+
+        with counter.get_lock():
+            counter.value += 1
+
+
+    image_list[indexes[0]:indexes[1]] = images
+    id_list[indexes[0]:indexes[1]] = ids
+
+def load_images(dir, scale, n_processes):
     """
     Load images into an array, sorted by name.
     As the image name corresponds to its ID, the index of the returned array corresponds to the image ID - 1.
@@ -48,29 +149,51 @@ def load_images(dir):
     # Sort by name
     image_files.sort()
 
+    chunk_size = len(image_files) // n_processes
+    chunk_extra = len(image_files) % n_processes
+    chunks = []
+    indexes = []
+    start = 0
+    for i in range(n_processes):
+        end = start + chunk_size + (1 if 1 < chunk_extra else 0)
+        chunks.append(image_files[start:end])
+        indexes.append((start, end))
+        start = end
+
     # Load all images into list
-    images = []
-    ids = []
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-        img = Image.open(img_path)  # Convert to grayscale
+    manager = Manager()
+    images = manager.list(range(len(image_files)))
+    ids = manager.list(range(len(image_files)))
 
-        # Resize the image
-        new_width = int(img.width * 0.1) # 0.1
-        new_height = int(img.height * 0.1)
+    counter = Value('i', 0)
+    minimum_img = Array('i', [999999, 999999])
 
-        print(f"{new_height} x {new_width}")
+    processes = []
+    for i in range(n_processes):
+        p = Process(target=image_load_worker, args=(chunks[i], scale, dir, indexes[i], images, ids, counter, minimum_img))
+        processes.append(p)
+        p.start()
 
-        img_resized = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
-        img_array = np.array(img_resized)
+    with tqdm(total=len(image_files)) as pbar:
+        while counter.value < len(image_files):
+            pbar.update(counter.value - pbar.n)
+            pbar.refresh()
 
-        # img_array = np.array(img)
+            time.sleep(1)
 
-        images.append(img_array)
-        ids.append(int(image_file.split('_')[0].split('.')[0]))
+        pbar.update(counter.value - pbar.n)
+
+    for p in processes:
+        p.join()
+
+    print(f"Smallest file has a size of {minimum_img[0]}x{minimum_img[1]}")
+
+    # images is list of image files _in order of name_
+    # important that gallery images are stored in the array correctly
+    # ids contains the id of said image
 
     # Return list of images in directory
-    return images, ids
+    return images, ids, minimum_img
 
 def get_all_filters(images, model):
     """
@@ -88,7 +211,7 @@ def get_all_filters(images, model):
     return image_filters
 
 # TODO save numpy arrays to NPZ so they dont have to be calculated if restarting python
-def initialise_data(data_dir):
+def initialise_data(data_dir, scale, n_processes):
     """
     Load all required state for testing.
     Loads:
@@ -101,12 +224,13 @@ def initialise_data(data_dir):
     shoe_dir = os.path.join(data_dir, "Gallery")
 
     # Load images in print directory
-    print_images, print_ids = load_images(print_dir)
+    print_images, print_ids, min_print_img = load_images(print_dir, scale, n_processes)
     print("Loaded ", len(print_images), " prints")
 
     # Load images in shoe directory
-    shoe_images, shoe_ids = load_images(shoe_dir)
+    shoe_images, shoe_ids, _ = load_images(shoe_dir, scale, n_processes)
     print("Loaded ", len(shoe_images), " shoes")
+
 
     # Note that there is a many to one relationship between query shoemark and gallery shoeprint in WVU2019
     # Get index of corresponding shoeprint from the index of a shoemark
@@ -114,14 +238,13 @@ def initialise_data(data_dir):
     for print_id in print_ids:
         matching_pairs.append(shoe_ids.index(print_id))
 
-    ipdb.set_trace()
     # model = Model("EfficientNet_B5", 7)
     # model = Model("VGG19", 36)
     # model = Model()
     # model = Model("EfficientNetV2_M", 4)
     # model = Model("EfficientNetV2_S", 7)
     # model = Model("EfficientNetV2_M", 6)
-    model = Model("EfficientNetV2_M", 6)
+    model = Model("EfficientNetV2_M", 4)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)
 
@@ -352,7 +475,6 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
         # Debug
         # worker(chunks[0], shoe_shared, print_ids[0], matching_pairs, rankings, counter, queue, rotations=rotations, scales=scales)
-
 
         # Spawn each process
         processes = []
