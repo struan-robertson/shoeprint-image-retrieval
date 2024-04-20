@@ -16,7 +16,8 @@ import timm
 
 def printmodel(model, input=(1,3,1968,5872)):
     from torchinfo import summary
-    print(summary(model, input))
+    with torch.no_grad():
+        print(summary(model, input))
 
 def get_output_size(model, input):
     input = torch.randn(input).cuda()
@@ -150,7 +151,7 @@ class Model:
         # model.load_state_dict(state_dict)
 
 
-        ipdb.set_trace()
+        # ipdb.set_trace()
         model = list(model.features.children())[:layers]  # pyright: ignore
 
         model = nn.Sequential(*model)

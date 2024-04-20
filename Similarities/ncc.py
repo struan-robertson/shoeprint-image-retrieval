@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from fft_conv_pytorch import fft_conv
 
+import cupy as cp
+
 import ipdb
 
 import numpy as np
@@ -144,6 +146,105 @@ def normxcorr_pt_many(template, image, n_filters):
     out[torch.where(torch.logical_not(torch.isfinite(out)))] = 0
 
     return out
+
+# FIXME handle template being bigger than image
+def conv_fft_cupy(template, image):
+
+    def power_of_two(n):
+        if n <= 0:
+            raise ValueError("Input must be a positive integer.")
+        elif (n & (n - 1)) == 0:
+            return n
+        else:
+            return 1 << (n.bit_length())
+
+    # Pad to equal size and ensure padded to power of 2
+    _, template_height, template_width = template.shape
+    _, image_height,  image_width  = image.shape
+
+    # Calculate size to pad images to
+    padded_height = power_of_two(image_height + template_height)
+    padded_width = power_of_two(image_width + template_width)
+
+    template_vert_padding = padded_height - template_height
+    template_hor_padding  = padded_width  - template_width
+
+    image_vert_padding = padded_height - image_height
+    image_hor_padding  = padded_width  - image_width
+
+    template_pad_top    = template_vert_padding // 2
+    template_pad_bottom = template_vert_padding // 2 + template_vert_padding % 2
+    template_pad_left   = template_hor_padding  // 2
+    template_pad_right  = template_hor_padding  // 2 + template_hor_padding  % 2
+
+    image_pad_top    = image_vert_padding // 2
+    image_pad_bottom = image_vert_padding // 2 + image_vert_padding % 2
+    image_pad_left   = image_hor_padding  // 2
+    image_pad_right  = image_hor_padding  // 2 + image_hor_padding % 2
+
+    # Try reflective
+    padded_template = cp.pad(template_, ((0, 0), (template_pad_top, template_pad_bottom), (template_pad_left, template_pad_right)), mode='constant')
+    padded_image = cp.pad(image, ((0,0), (image_pad_top, image_pad_bottom), (image_pad_left, image_pad_right)), mode='constant')
+
+    template_fft   = cp.fft.rfft2(padded_template, axes=(1, 2))
+    image_fft = cp.fft.rfft2(padded_image, axes=(1,2))
+
+    # Multiply in the frequency domain
+    product_fft = cp.multiply(template_fft, image_fft)
+
+    # Convert back into time-domain
+    result = cp.fft.irfft2(product_fft, axes=(1,2))
+
+    # Truncate padding
+    result = result[:, image_pad_top:image_height+gaallery_pad_bottom, image_pad_left, image_width+image_pad_right]
+
+    return result
+
+
+
+def get_similarity_cupy(print_, shoe):
+
+    n_filters = len(print_)
+
+    # print_ = cp.array(print_)
+    # shoe = cp.array(shoe)
+
+    # Crop arrays by 2 pixels/edge to remove edge artifacts
+    print_ = print_[:, 2:-2, 2:-2]
+    shoe   = shoe[:, 2:-2, 2:-2]
+
+    # Calculate ZNCC
+
+    # Subtract mean
+    print_ -= cp.mean(print_, axis=(1,2), keepdims=True)
+    shoe   -= cp.mean(shoe, axis=(1,2), keepdims=True)
+
+    a1 = cp.ones(print_.shape)
+
+    out = conv_fft_cupy(print_, shoe)
+
+    first_part  = conv_fft_cupy(cp.square(shoe), a1)
+    second_part = cp.square(conv_fft_cupy(shoe, s1))
+    third_part  = cp.prod(print_.shape)
+
+    shoe = first_part - second_part / third_part
+
+    # Remove machine precision errors
+    shoe[cp.where(shoe < 0)] = 0
+
+    print_ = cp.sum(cp.square(print_))
+
+    ncc_array = out / cp.sqrt(shoe * print_)
+
+    # Remove divisions by 0
+    ncc_array[cp.where(cp.logical_not(cp.isfinite(ncc_array)))] = 0
+
+    ncc_map = cp.sum(ncc_array, axis=0)
+
+    similarity = cp.max(ncc_map) / n_filters
+
+    return similarity
+
 
 def get_similarity(print_, shoe):
 

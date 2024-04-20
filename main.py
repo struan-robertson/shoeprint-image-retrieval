@@ -15,6 +15,7 @@ from sklearn.cluster import KMeans
 
 # GPU
 import torch
+import cupy as cp
 
 # CPU
 from multiprocessing import Array, Process, Value, Queue, Manager
@@ -36,7 +37,7 @@ from Networks.network_pt import Model, get_output_size
 
 # ------ Similarity Measures ------
 
-from Similarities.ncc import get_similarity, get_similarity_gpu
+from Similarities.ncc import get_similarity, get_similarity_cupy
 # from Similarities.orb import get_similarity
 # from Similarities.dim import get_similarity
 
@@ -79,9 +80,12 @@ def smallest_img(image_files, dir):
 
     return smallest_img_name, smallest_img_dims
 
-
-def biggest_img(dir):
+def biggest_img_dir(dir):
     image_files = os.listdir(dir)
+
+    return biggest_img(image_files, dir)
+
+def biggest_img(image_files, dir):
 
     biggest_img_size = float(0)
     biggest_img_name = None
@@ -116,12 +120,13 @@ def move_small_img(dir, smallest, destdir):
                 print(f"Moved {image_file}")
 
 
-def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter):
+def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter, type="impress"):
     # Load all images into list
     images = []
     ids = []
     for image_file in image_files:
         img_path = os.path.join(dir, image_file)
+
         img = Image.open(img_path)  # Convert to grayscale
 
         # Resize the image
@@ -132,7 +137,13 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
         img_array = np.array(img_resized)
 
         images.append(img_array)
-        ids.append(int(image_file.split('_')[0].split('.')[0]))
+
+        if type == "impress":
+            ids.append(int(image_file.split('_')[0].split('.')[0]))
+        elif type == "WVU2019":
+            ids.append(int(image_file[:3]))
+        elif type == "FID-300":
+            ids.append(int(image_file[:-4]))
 
         with counter.get_lock():
             counter.value += 1
@@ -142,22 +153,25 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
     id_list[indexes[0]:indexes[1]] = ids
 
 
-def cluster_images_by_size(directory, n_clusters=5):
+def cluster_images_by_size(dir, n_clusters=5):
     image_sizes = []
     filenames = []
 
     # Iterate over files in the directory
-    for filename in os.listdir(directory):
-        filepath = os.path.join(directory, filename)
+    for image_file in os.listdir(dir):
+        img_path = os.path.join(dir, image_file)
 
-        # Check if the file is an image
-        if os.path.isfile(filepath) and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-            # Open the image using PIL
-            with Image.open(filepath) as img:
-                # Get the dimensions of the image
-                width, height = img.size
-                image_sizes.append([width, height])
-                filenames.append(filename)
+        # Open the image using PIL
+        with Image.open(img_path) as img:
+            # Get the dimensions of the image
+            width, height = img.size
+            # image_sizes.append([width, height])
+            if width < height:
+                image_sizes.append([width])
+            else:
+                image_sizes.append([height])
+
+            filenames.append(image_file)
 
     # Perform k-means clustering
     kmeans = KMeans(n_clusters=n_clusters)
@@ -176,8 +190,7 @@ def cluster_images_by_size(directory, n_clusters=5):
     return clusters
 
 
-
-def load_images(image_files, scale, n_processes):
+def load_images(image_files, dir, scale, n_processes, dtype):
     """
     Load images into an array, sorted by name.
     As the image name corresponds to its ID, the index of the returned array corresponds to the image ID - 1.
@@ -209,7 +222,7 @@ def load_images(image_files, scale, n_processes):
 
     processes = []
     for i in range(n_processes):
-        p = Process(target=image_load_worker, args=(chunks[i], scale, dir, indexes[i], images, ids, counter))
+        p = Process(target=image_load_worker, args=(chunks[i], scale, dir, indexes[i], images, ids, counter, dtype))
         processes.append(p)
         p.start()
 
@@ -247,20 +260,41 @@ def get_all_filters(images, model):
     # Return conv filters
     return image_filters
 
-def find_best_scale(model, initial_size):
-    # get size of feature maps un-modified
-    unmodified = get_output_size(model, initial_size)
+def find_best_scale(smallest_size, biggest_size, block=5):
+    # Smallest dim on block 5 200 -> 13
+    # so then < 200 should be executed on block 4
+    # Biggest dim on block 5 800 -> 50
+    # Anything > 800 must be scaled to 800
+    min_dim=200
+    # max_dim=800
+    max_dim = 1500
 
-    # width is always smallest (in correctly oriented shoeprint images) so calculate based on that
-    ideal_minimum_featuremap_width = 15
+    if block != 5:
+        diff = 5 - block
+        min_dim /= 2 * diff
+        max_dim /= 2 * diff
 
-    scale = ideal_minimum_featuremap_width / unmodified[2]
+    smallest_dim = min(smallest_size[0], smallest_size[1])
+    biggest_dim = max(biggest_size[0], biggest_size[1])
 
-    return scale
+    # I need to ensure that the scale of the group falls within that range
 
+    if smallest_dim >= min_dim and biggest_dim <= max_dim:
+        scale = 1
+    elif smallest_dim <= min_dim:
+        if block != 4:
+        # if block != 1:
+            scale, block = find_best_scale(smallest_size, biggest_size, block=(block-1))
+        else:
+            print("Not falling back further than block 1")
+            scale = 1
+    elif biggest_dim >= max_dim:
+        scale = max_dim / biggest_dim
+
+    return scale, block
 
 # TODO save numpy arrays to NPZ so they dont have to be calculated if restarting python
-def orchestrate(data_dir, n_processes):
+def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], scales=[]):
     """
     Load all required state for testing.
     Loads:
@@ -273,6 +307,9 @@ def orchestrate(data_dir, n_processes):
     shoe_dir = os.path.join(data_dir, "Gallery")
 
     shoe_files = os.listdir(shoe_dir)
+    print_files = os.listdir(print_dir)
+
+    print(f"Total of {len(shoe_files)} reference shoeprints and {len(print_files)} shoemarks")
 
     clustered = cluster_images_by_size(print_dir, 5)
 
@@ -282,7 +319,6 @@ def orchestrate(data_dir, n_processes):
     # model = Model("EfficientNetV2_M", 4)
     # model = Model("EfficientNetV2_S", 7)
     # model = Model("EfficientNetV2_M", 6)
-    model = Model("EfficientNetV2_M", 5)
     # model = Model("EfficientNetV2_M", 1)
     # model = Model("VGG16", 23)
 
@@ -290,23 +326,41 @@ def orchestrate(data_dir, n_processes):
 
     for cluster in clustered.items():
         cluster = cluster[1]
-        smallest = smallest_img(cluster, print_dir)[1]
+        print(f"Cluster has {len(cluster)} items")
 
-        scale = find_best_scale(model, (1, 3, smallest[0], smallest[1]))
+        # TODO dont assume smallest is in print_dir and biggest is in shoe_dir
+        smallest = smallest_img(cluster, print_dir)[1]
+        biggest = biggest_img(shoe_files, shoe_dir)[1]
+
+        scale, block = find_best_scale(smallest, biggest)
+
+        model = Model("EfficientNetV2_M", block)
+
+        print(f"Best cluster scale found to be {scale} on block {block}")
 
         # Load images in print directory
-        print_images, print_ids = load_images(cluster, scale, n_processes)
-        print("Loaded ", len(cluster), " prints")
+        print("Loading ", len(cluster), " prints")
+        print_images, print_ids = load_images(cluster, print_dir, scale, n_processes, dtype)
 
         # Load images in shoe directory
-        shoe_images, shoe_ids = load_images(shoe_files, scale, n_processes)
-        print("Loaded ", len(shoe_files), " shoes")
+        print("Loading ", len(shoe_files), " shoes")
+        shoe_images, shoe_ids = load_images(shoe_files, shoe_dir, scale, n_processes, dtype)
 
         # Note that there is a many to one relationship between query shoemark and gallery shoeprint in WVU2019
         # Get index of corresponding shoeprint from the index of a shoemark
         matching_pairs = []
-        for print_id in print_ids:
-            matching_pairs.append(shoe_ids.index(print_id))
+        if dtype != "FID-300":
+            for print_id in print_ids:
+                matching_pairs.append(shoe_ids.index(print_id))
+        else:
+            csv_vals = {}
+            with open(os.path.join(data_dir, "label_table.csv"), 'r') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    csv_vals[int(row[0])] = int(row[1])
+
+            for print_id in print_ids:
+                matching_pairs.append(csv_vals[print_id]-1)
 
         # Calculate conv filters for print images
         print("Calculating convolutional filters for prints")
@@ -316,9 +370,11 @@ def orchestrate(data_dir, n_processes):
         print("Calculating convolutional filters for shoes")
         shoe_filters = get_all_filters(shoe_images, model)
 
-        cluster_ranks = compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=n_processes, rotations=[], scales=[])
+        print("Calculating ranks")
+        cluster_ranks = compare(print_filters, shoe_filters, matching_pairs, device=device, n_processes=n_processes, rotations=rotations, scales=scales)
 
-        ranks += cluster_ranks
+        ranks += cluster_ranks.tolist()
+        torch.cuda.empty_cache()
 
     return ranks
     # return (print_filters, shoe_filters, matching_pairs)
@@ -358,6 +414,7 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
     # scaled_prints_arr.append(mirrored_filters)
 
+    # TODO this is currently applying each transformation individually
     for r in rotations:
         new_prints = []
 
@@ -445,6 +502,13 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
     # GPU single threaded as multithreading seemed to only add overhead
     if device == "gpu":
 
+        if type(print_filters[0]) == torch.Tensor or type(print_filters[0]) == np.ndarray:
+            for i in range(len(print_filters)):
+                print_filters[i] = cp.array(print_filters[i].numpy())
+        if type(shoe_filters[0]) == torch.Tensor or type(print_filters[0]) == np.ndarray:
+            for i in range(len(shoe_filters)):
+                shoe_filters[i] = cp.array(shoe_filters[i].numpy())
+
         rankings = []
 
         # Batch shoe scans by shape
@@ -474,23 +538,22 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
         #     for s in split:
         #         shoe_filters.append(torch.cat(s).unsqueeze(0))
 
+        with tqdm(total=len(print_filters)) as pbar:
+            for print_id, print_ in enumerate(print_filters):
 
-        pbar = tqdm(total=len(print_filters), file=sys.stdout)
-        for print_id, print_ in enumerate(print_filters):
+                similarities = []
 
-            similarities = []
+                for shoe in shoe_filters:
 
-            for shoe in shoe_filters:
+                    new_sims = get_similarity_cupy(print_, shoe).asnumpy()
+                    for sim in new_sims:
+                        similarities.append(sim)
 
-                new_sims = get_similarity_gpu(print_, shoe.unsqueeze(0), gpu_fix=gpu_fix).numpy()
-                for sim in new_sims:
-                    similarities.append(sim)
+                rank = get_rank(similarities, matching_pairs, print_id)
+                rankings.append(rank)
 
-            rank = get_rank(similarities, matching_pairs, print_id)
-            rankings.append(rank)
-
-            pbar.update()
-            pbar.write(f"Print {print_id+1} true match ranked {rank}")
+                pbar.update()
+                pbar.write(f"Print {print_id+1} true match ranked {rank}")
 
         return rankings
 
@@ -550,7 +613,8 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
         # Update tqdm progress bar with values in queue and counter
         # work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
-        work = (len(rotations) + len(scales) + 1) * n_prints #* 2
+        # work = (len(rotations) + len(scales) + 1 + 1) * n_prints
+        work = (len(rotations) + len(scales) + 1) * n_prints
         with tqdm(total=work) as pbar:
             while counter.value < work: #pyright: ignore
                 while not queue.empty():
