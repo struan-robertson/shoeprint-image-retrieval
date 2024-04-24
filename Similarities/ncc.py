@@ -28,17 +28,28 @@ def normxcorr(template, image, mode="same"):
     :return: N-D array of same dimensions as image. Size depends on mode parameter.
     """
 
-    template = template - np.mean(template)
-    image = image - np.mean(image)
+    template = template - np.mean(template) # -13.28 9.53
+    image = image - np.mean(image) # -15.69 13.87
     a1 = np.ones(template.shape)
     # Faster to flip up down and left right then use fftconvolve instead of scipy's correlate
     ar = np.flipud(np.fliplr(template))
 
-    out = convolve(image, ar, mode=mode)
+    try:
+        out = convolve(image, ar, mode=mode) # -783.05 644
 
-    # TODO try simplistic algorithm and see how much of a difference it makes
-    image = convolve(np.square(image), a1, mode=mode) - \
-            np.square(convolve(image, a1, mode=mode)) / (np.prod(template.shape))
+        # np.square(image) 0.0001 246
+        first_part = convolve(np.square(image), a1, mode=mode) # 483 3453
+
+        # image: -15.69 13.87
+        second_part = np.square(convolve(image, a1, mode=mode)) # 0.006 67841
+        third_part = (np.prod(template.shape)) # 102
+
+        # image = convolve(np.square(image), a1, mode=mode) - \
+        #         np.square(convolve(image, a1, mode=mode)) / (np.prod(template.shape))
+        image = first_part - second_part / third_part # 467 3269
+    except Exception as e:
+        print(f"Error {image.shape} {ar.shape}")
+
 
     # Remove small machine precision errors after subtraction
     image[np.where(image < 0)] = 0
@@ -50,7 +61,7 @@ def normxcorr(template, image, mode="same"):
 
     return out
 
-def normxcorr_simple(template, image, mode="same"):
+def normxcorr_simple(image, template, mode="same"):
     """
     Not proper NCC and slightly less accurate, however is considerably quicker to run
     """
@@ -147,7 +158,6 @@ def normxcorr_pt_many(template, image, n_filters):
 
     return out
 
-# FIXME handle template being bigger than image
 def conv_fft_cupy(template, image):
 
     def power_of_two(n):
@@ -158,6 +168,8 @@ def conv_fft_cupy(template, image):
         else:
             return 1 << (n.bit_length())
 
+    n_filters = len(template)
+
     # Pad to equal size and ensure padded to power of 2
     _, template_height, template_width = template.shape
     _, image_height,  image_width  = image.shape
@@ -166,41 +178,73 @@ def conv_fft_cupy(template, image):
     padded_height = power_of_two(image_height + template_height)
     padded_width = power_of_two(image_width + template_width)
 
-    template_vert_padding = padded_height - template_height
-    template_hor_padding  = padded_width  - template_width
+    # extra_height = power_of_two(padded_height) - padded_height
+    # extra_width = power_of_two(padded_width) - padded_width
 
     image_vert_padding = padded_height - image_height
     image_hor_padding  = padded_width  - image_width
-
-    template_pad_top    = template_vert_padding // 2
-    template_pad_bottom = template_vert_padding // 2 + template_vert_padding % 2
-    template_pad_left   = template_hor_padding  // 2
-    template_pad_right  = template_hor_padding  // 2 + template_hor_padding  % 2
+    template_vert_padding = padded_height - template_height
+    template_hor_padding  = padded_width  - template_width
 
     image_pad_top    = image_vert_padding // 2
     image_pad_bottom = image_vert_padding // 2 + image_vert_padding % 2
     image_pad_left   = image_hor_padding  // 2
     image_pad_right  = image_hor_padding  // 2 + image_hor_padding % 2
 
+    template_pad_top    = template_vert_padding // 2
+    template_pad_bottom = template_vert_padding // 2 + template_vert_padding % 2
+    template_pad_left   = template_hor_padding  // 2
+    template_pad_right  = template_hor_padding  // 2 + template_hor_padding % 2
+
     # Try reflective
-    padded_template = cp.pad(template_, ((0, 0), (template_pad_top, template_pad_bottom), (template_pad_left, template_pad_right)), mode='constant')
+    padded_template = cp.pad(template, ((0, 0), (template_pad_top, template_pad_bottom), (template_pad_left, template_pad_right)), mode='constant')
     padded_image = cp.pad(image, ((0,0), (image_pad_top, image_pad_bottom), (image_pad_left, image_pad_right)), mode='constant')
 
-    template_fft   = cp.fft.rfft2(padded_template, axes=(1, 2))
+    # Pad to power of 2
+    # padded_template = cp.pad(padded_template, ((0,0), (0, extra_height), (0, extra_width)), mode='constant')
+    # padded_image = cp.pad(padded_image, ((0,0), (0, extra_height), (0, extra_width)), mode='constant')
+
+    template_fft   = cp.fft.rfft2(padded_template,  axes=(1, 2))
     image_fft = cp.fft.rfft2(padded_image, axes=(1,2))
 
     # Multiply in the frequency domain
-    product_fft = cp.multiply(template_fft, image_fft)
+    product_fft = template_fft * image_fft
 
     # Convert back into time-domain
     result = cp.fft.irfft2(product_fft, axes=(1,2))
 
+    result = cp.real(result)
+
+    # Remove power of 2 padding
+    # result = result[:, :-extra_height, :-extra_width]
+
     # Truncate padding
-    result = result[:, image_pad_top:image_height+gaallery_pad_bottom, image_pad_left, image_width+image_pad_right]
+    # result = result[:, image_pad_top:image_height+image_pad_bottom, image_pad_right:image_width+image_pad_left]
+    center_x = result.shape[2] // 2
+    center_y = result.shape[1] // 2
 
+    start_x = center_x - (image_width // 2)
+    start_y = center_y - (image_height // 2)
+    end_x = start_x + image_width
+    end_y = start_y + image_height
+
+    centered_slice = result[:, start_y:end_y, start_x:end_x]
+
+    return centered_slice
+
+def conv_many(image, template):
+    # template = template.get()
+    # image = image.get()
+
+    result = np.zeros_like(image)
+
+    n_filters = len(template)
+
+    for i in range(n_filters):
+        result[i] = convolve(image[i], template[i], mode="same")
+
+    # return cp.array(result)
     return result
-
-
 
 def get_similarity_cupy(print_, shoe):
 
@@ -208,52 +252,77 @@ def get_similarity_cupy(print_, shoe):
 
     # print_ = cp.array(print_)
     # shoe = cp.array(shoe)
+    # print_np = print_.get()
+    # shoe_np = shoe.get()
 
+    # ipdb.set_trace()
+    # sim = get_similarity(print_np, shoe_np)
+
+    # TODO remove edges and mean _before_ hand to speed up computation
+    #
     # Crop arrays by 2 pixels/edge to remove edge artifacts
-    print_ = print_[:, 2:-2, 2:-2]
-    shoe   = shoe[:, 2:-2, 2:-2]
+    print_ = print_[:, 2:-2, 2:-2] # -28.74 24.87
+    shoe   = shoe[:, 2:-2, 2:-2] # -25.66 27.81
 
     # Calculate ZNCC
 
     # Subtract mean
-    print_ -= cp.mean(print_, axis=(1,2), keepdims=True)
-    shoe   -= cp.mean(shoe, axis=(1,2), keepdims=True)
+    # print_ -= cp.mean(print_, axis=(1,2), keepdims=True) # -13.29 9.53
+    # shoe   -= cp.mean(shoe, axis=(1,2), keepdims=True) # -15.70 13.87
+    for i in range(n_filters):
+        print_[i] -= cp.mean(print_[i])
+        shoe[i] -= cp.mean(shoe[i])
 
-    a1 = cp.ones(print_.shape)
+    # ipdb.set_trace()
 
-    out = conv_fft_cupy(print_, shoe)
+    a1 = cp.ones(print_.shape) # 1 1
 
-    first_part  = conv_fft_cupy(cp.square(shoe), a1)
-    second_part = cp.square(conv_fft_cupy(shoe, s1))
-    third_part  = cp.prod(print_.shape)
+    # Rotate as convolution is calculated but I need correlation
+    ar = cp.rot90(print_, k=2, axes=(1,2)) # -12.68 9.60
 
-    shoe = first_part - second_part / third_part
+    # print_ = print_.get()
+    # shoe = shoe.get()
+    # ar = ar.get()
+    # a1 = a1.get()
+
+    out = conv_fft_cupy(ar, shoe) # -1083.58 895.61
+    # out = conv_many(shoe, ar)
+
+    first_part  = conv_fft_cupy(a1, cp.square(shoe)) # 0 7480.11
+    second_part = cp.square(conv_fft_cupy(a1, shoe)) # 0 94955.98
+    # first_part = conv_many(np.square(shoe), a1) # 2120 3048
+    # second_part = np.square(conv_many(shoe, a1)) # 11.43 39217
+    third_part  = np.prod(print_.shape[1:]) # 102
+
+    shoe = first_part - second_part / third_part # 0 3269.89
 
     # Remove machine precision errors
-    shoe[cp.where(shoe < 0)] = 0
+    shoe[cp.where(shoe < 0)] = 0 # 0 3269.89
 
-    print_ = cp.sum(cp.square(print_))
+    print_ = cp.sum(np.square(print_), axis=(1,2), keepdims=True) # 2320.22
 
-    ncc_array = out / cp.sqrt(shoe * print_)
+    ncc_array = out / cp.sqrt(shoe * print_) # -0.32 0.27
 
     # Remove divisions by 0
-    ncc_array[cp.where(cp.logical_not(cp.isfinite(ncc_array)))] = 0
+    ncc_array[cp.where(cp.logical_not(cp.isfinite(ncc_array)))] = 0 # -0.405 0.46
 
-    ncc_map = cp.sum(ncc_array, axis=0)
+    ncc_map = cp.sum(ncc_array, axis=0) # -4.78 4.04
 
-    similarity = cp.max(ncc_map) / n_filters
+    # TODO test also including negative correlation
+    similarity = cp.max(ncc_map) / n_filters # 0.050
 
+    # ipdb.set_trace()
     return similarity
 
 
 def get_similarity(print_, shoe):
 
     # Crop arrays by 2 pixels/edge to remove edge artifacts
-    print_ = print_[:, 2:-2, 2:-2]
-    shoe = shoe[:, 2:-2, 2:-2]
+    print_ = print_[:, 2:-2, 2:-2] # -25.53 23.65
+    shoe = shoe[:, 2:-2, 2:-2] # -25.66 27.81
 
     # Number of filters for both shoe and print
-    n_filters = len(print_)
+    n_filters = len(print_) # 80
 
     # Useful if using "full" padding
     # shape = (shoe.shape[0], shoe.shape[1] + print_.shape[1] -1, shoe.shape[2] + print_.shape[2] -1)
@@ -267,6 +336,7 @@ def get_similarity(print_, shoe):
         ncc_array[index] = normxcorr(print_filter, shoe_filter, "same")
         # ncc_array[index] = normxcorr_simple(print_filter, shoe_filter, "same")
 
+    # - 4.78 5.08
     ncc_array = np.sum(ncc_array, axis=0)
 
     similarity = np.max(ncc_array) / n_filters
