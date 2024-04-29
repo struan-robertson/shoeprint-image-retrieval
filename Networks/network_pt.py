@@ -163,9 +163,10 @@ class Model:
         # Create model
         model = model.to(self.device)  # pyright: ignore
 
-        # printmodel(model)
 
         model.eval()
+
+        # ipdb.set_trace()
 
         self.model = model
         self.transform = transform

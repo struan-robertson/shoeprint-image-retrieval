@@ -49,6 +49,7 @@ def normxcorr(template, image, mode="same"):
         image = first_part - second_part / third_part # 467 3269
     except Exception as e:
         print(f"Error {image.shape} {ar.shape}")
+        exit()
 
 
     # Remove small machine precision errors after subtraction

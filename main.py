@@ -138,8 +138,10 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
 
         # Note that this is in all dimensions
         # FIXME this obviosly affects the minimum resolution logic
-        crop_width = int(0.15 * new_width)
-        crop_height = int(0.05 * new_height)
+        # crop_width = int(0.15 * new_width)
+        # crop_height = int(0.05 * new_height)
+        crop_width = int(0.2 * new_width)
+        crop_height = int(0.1 * new_height)
 
         img_array = img_array[crop_height:new_height-crop_height, crop_width:new_width-crop_width]
 
@@ -279,73 +281,34 @@ def cropsize(size, factor):
     return size - crop_amount*2
 
 
+def find_best_scale(D_smallest, D_largest, D_min=300, block=6):
 
+    D_max = 800
+    end_block = 4
+    skip_blocks = [5]
 
-def find_best_scale(smallest_size, biggest_size, block=6, scale=1):
-
-    # FIXME this isnt very clean but since it is just for a couple of datasets it should be ok
-    # Also should probs just use pixel values
-    width_crop = 0.15
-    height_crop = 0.05
-
-    smallest_height, smallest_width = smallest_size
-    biggest_height, biggest_width = biggest_size
-
-    smallest_size = (cropsize(smallest_height, height_crop), cropsize(smallest_width, width_crop))
-    biggest_size  = (cropsize(biggest_height, height_crop), cropsize(biggest_width, width_crop))
-
-    min_dim=300
-    max_dim=800
-    # 500/600 gets 82.25!
-    # max_dim = 1000
-
-    # TODO dont know that this is an ideal ratio, test on FID-300
-    # if block != 5:
-    #     diff = 5 - block
-    #     min_dim /= 2 * diff
-    #     max_dim /= 2 * diff
-
-    # Skip block 5
-    if block == 5:
-        block = 4
-
-    if block == 4:
-        min_dim /= 2
-
-    # Images are clustered by smallest dimension using K-means clustering.
-    # These clusters can then be used to calculate the ideal scale for that cluster.
-    # If the smallest dimension and largest dimension fall within the upper and lower bounds, no scaling is required.
-    # If the smallest dimension falls
-
-    smallest_dim = min(smallest_size[0], smallest_size[1])
-    biggest_dim = max(biggest_size[0], biggest_size[1])
-
-    # I need to ensure that the scale of the group falls within that range
-
-    # If image is between min and max then dont scale
-    # If image is too small then call recursively
-    # If image is too large then it should all be scaled down, _however ensuring that the scaling does not make the smallest image go below the minimum_
-    # If it does then the scaling where the smallest image is no less than the minimum should be chosen
-
-    if smallest_dim >= min_dim and biggest_dim <= max_dim:
+    if D_smallest >= D_min and D_largest <= D_max:
         scale = 1
-    elif smallest_dim <= min_dim:
-        if block != 4:
-            scale, block = find_best_scale(smallest_size, biggest_size, block=(block-1))
+    elif D_smallest < D_min:
+        if block > end_block:
+            while True:
+                block -= 1
+                if block not in skip_blocks:
+                    break
+            D_min /= 2
+            scale, block = find_best_scale(D_smallest, D_largest, D_min, block-1)
         else:
-            print("Not falling back further than block 4")
             scale = 1
-    elif biggest_dim >= max_dim:
-        scale = max_dim / biggest_dim
-
-        # If scale makes smallest dim < min dim use block 4 instead
-        if smallest_dim*scale <= min_dim:
-            if block == 6:
-                print("Falling back to block 4 to compensate for required scale")
-                block = 4
+    elif D_largest > D_max:
+        scale = D_max / D_largest
+        if D_smallest*scale < D_min:
+            if block > end_block:
+                while True:
+                    block -= 1
+                    if block not in skip_blocks:
+                        break
             else:
-                print("Reduced scaling to prevent feature maps below threshold")
-                scale = min_dim / smallest_dim
+                scale = D_min / D_smallest
 
     return scale, block
 
@@ -361,24 +324,35 @@ def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05)
     blocks = []
     minimized_groups = []
 
+    largest_shoe = biggest_img(shoe_files, shoe_dir)[1]
+    smallest_shoe = smallest_img(shoe_files, shoe_dir)[1]
+
     for cluster in clusters.items():
         cluster = cluster[1]
 
         smallest_print = smallest_img(cluster, print_dir)[1]
-        smallest_shoe = smallest_img(shoe_files, shoe_dir)[1]
         if min(smallest_print) < min(smallest_shoe):
             smallest = smallest_print
         else:
             smallest = smallest_shoe
 
-        biggest_print = biggest_img(cluster, print_dir)[1]
-        biggest_shoe = biggest_img(shoe_files, shoe_dir)[1]
-        if max(biggest_print) > max(biggest_shoe):
-            biggest = biggest_print
+        largest_print = biggest_img(cluster, print_dir)[1]
+        if max(largest_print) > max(largest_shoe):
+            largest = largest_print
         else:
-            biggest = biggest_shoe
+            largest = largest_shoe
 
-        scale, block = find_best_scale(smallest, biggest)
+        # FIXME ugly way to add cropping, guess its just for a couple datasets though
+        # width_crop = 0.15
+        # height_crop = 0.05
+
+        width_crop = 0.2
+        height_crop = 0.1
+
+        smallest = cropsize(smallest[0], height_crop) if smallest[0] < smallest[1] else cropsize(smallest[1], width_crop)
+        largest  = cropsize(largest[0], height_crop) if largest[0] > largest[1] else cropsize(largest[1], width_crop)
+
+        scale, block = find_best_scale(smallest, largest)
 
         in_range, index = is_within_range(scale, scales)
 
@@ -392,7 +366,6 @@ def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05)
     return scales, blocks, minimized_groups
 
 
-# TODO save numpy arrays to NPZ so they dont have to be calculated if restarting python
 def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], search_scales=[]):
     """
     Load all required state for testing.
@@ -434,8 +407,9 @@ def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], search
 
         print(f"Cluster has {len(cluster)} items")
 
-        model = Model("EfficientNetV2_M", block)
-        # model = Model()
+        # model = Model("EfficientNetV2_M", block)
+        model = Model()
+        scale = 0.1
 
         print(f"Best cluster scale found to be {scale} on block {block}")
 
@@ -518,15 +492,6 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
     # scaled_prints_arr.append(mirrored_filters)
 
-    # TODO this is currently applying each transformation individually
-    for r in rotations:
-        new_prints = []
-
-        for print_ in print_filters:
-            new_prints.append(ndimage.rotate(print_, r, axes=(1,2)))
-
-        scaled_prints_arr.append(new_prints)
-
     for s in scales:
 
         new_prints = []
@@ -544,6 +509,26 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
         scaled_prints_arr.append(new_prints)
 
+    rotated_prints_arr = scaled_prints_arr.copy()
+
+    for scaled_print in scaled_prints_arr:
+
+        for r in rotations:
+            new_prints = []
+
+            for print_ in scaled_print:
+                new_print = []
+
+                for filter in print_:
+                    filter = Image.fromarray(filter)
+                    filter = filter.rotate(r)
+
+                    new_print.append(filter)
+
+                new_prints.append(np.array(new_print))
+
+            rotated_prints_arr.append(new_prints)
+
     similarities_all = np.zeros((len(print_filters), len(shoe_filters)))
 
     # If using GPU
@@ -555,7 +540,7 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
             for j in range(len(scaled_prints_arr[i])):
                 scaled_prints_arr[i][j] = cp.array(scaled_prints_arr[i][j])
 
-    for rotated_prints in scaled_prints_arr:
+    for rotated_prints in rotated_prints_arr:
 
         for print_id, print_ in zip(range(*print_ids), rotated_prints):
             # TODO remove this to simulate IRL
@@ -673,9 +658,9 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
         p.start()
 
     # Update tqdm progress bar with values in queue and counter
-    # work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
+    work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
     # work = (len(rotations) + len(scales) + 1 + 1) * n_prints
-    work = (len(rotations) + len(scales) + 1) * n_prints
+    # work = (len(rotations) + len(scales) + 1) * n_prints
     with tqdm(total=work) as pbar:
         while counter.value < work: #pyright: ignore
             while not queue.empty():
