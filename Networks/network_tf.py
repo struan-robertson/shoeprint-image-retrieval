@@ -30,7 +30,7 @@ class Model:
         if model_str == "VGG19":
             # Create model
             model = VGG19(include_top=False, weights=None, input_tensor=None, input_shape=None, pooling=None, classes=1000)
-            model.load_weights('vgg19_weights_tf_dim_ordering_tf_kernels_notop.h5')
+            model.load_weights('Networks/vgg19_weights_tf_dim_ordering_tf_kernels_notop.h5')
 
         # Create model
         model = models.Model(inputs=model.inputs, outputs=model.layers[layers].output) #pyright: ignore

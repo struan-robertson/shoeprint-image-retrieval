@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 vgg19 = VGG19(include_top=False, weights=None, input_tensor=None, input_shape=None, pooling=None, classes=1000)
-vgg19.load_weights('vgg19_weights_tf_dim_ordering_tf_kernels_notop.h5')
+vgg19.load_weights('Networks/vgg19_weights_tf_dim_ordering_tf_kernels_notop.h5')
 
 # Do they not realise that this returns 15 layers?
 model = Model(inputs=vgg19.inputs, outputs=vgg19.layers[14].output)
