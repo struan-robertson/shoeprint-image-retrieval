@@ -41,87 +41,17 @@ from Similarities.ncc import get_similarity, get_similarity_cupy
 # from Similarities.orb import get_similarity
 # from Similarities.dim import get_similarity
 
-def avg_img_size(dir):
-    image_files = os.listdir(dir)
-    total_width = 0
-    total_height = 0
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-        with Image.open(img_path) as img:
-            width, height = img.size
-            total_width += width
-            total_height += height
-    avg_width = total_width // len(image_files)
-    avg_height = total_height // len(image_files)
-    return avg_width, avg_height
+# ------ Utilities ------
+from utils import avg_img_size, smallest_img_dir, smallest_img, largest_img_dir, largest_img, move_small_img
 
-def smallest_img_dir(dir):
-    image_files = os.listdir(dir)
-
-    return smallest_img(image_files, dir)
-
-def smallest_img(image_files, dir):
-
-    smallest_img_size = float('inf')
-    smallest_img_name = None
-    smallest_img_dims = (0,0)
-
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-
-        with Image.open(img_path) as img:
-            width, height = img.size
-            image_size = width * height
-
-            if image_size < smallest_img_size:
-                smallest_img_name = image_file
-                smallest_img_size = image_size
-                smallest_img_dims = (width, height)
-
-    return smallest_img_name, smallest_img_dims
-
-def biggest_img_dir(dir):
-    image_files = os.listdir(dir)
-
-    return biggest_img(image_files, dir)
-
-def biggest_img(image_files, dir):
-
-    biggest_img_size = float(0)
-    biggest_img_name = None
-    biggest_img_dims = (0,0)
-
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-
-        with Image.open(img_path) as img:
-            width, height = img.size
-            image_size = width * height
-
-            if image_size > biggest_img_size:
-                biggest_img_name = image_file
-                biggest_img_size = image_size
-                biggest_img_dims = (width, height)
-
-    return biggest_img_name, biggest_img_dims
-
-def move_small_img(dir, smallest, destdir):
-
-    image_files = os.listdir(dir)
-
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-
-        with Image.open(img_path) as img:
-            width, height = img.size
-
-            if width < smallest[0] or height < smallest[1]:
-                shutil.move(img_path, destdir)
-                print(f"Moved {image_file}")
-
+# ------ Parse Results ------
+from parse_results import cmp_all
 
 def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, counter, type="impress"):
-    # Load all images into list
+    """
+    Worker for multi_threaded loading of images
+    """
+
     images = []
     ids = []
     for image_file in image_files:
@@ -160,48 +90,9 @@ def image_load_worker(image_files, scale, dir, indexes, image_list, id_list, cou
     image_list[indexes[0]:indexes[1]] = images
     id_list[indexes[0]:indexes[1]] = ids
 
-
-def cluster_images_by_size(dir, n_clusters=5):
-    image_sizes = []
-    filenames = []
-
-    # Iterate over files in the directory
-    for image_file in os.listdir(dir):
-        img_path = os.path.join(dir, image_file)
-
-        # Open the image using PIL
-        with Image.open(img_path) as img:
-            # Get the dimensions of the image
-            width, height = img.size
-            # image_sizes.append([width, height])
-            if width < height:
-                image_sizes.append([width])
-            else:
-                image_sizes.append([height])
-
-            filenames.append(image_file)
-
-    # Perform k-means clustering
-    kmeans = KMeans(n_clusters=n_clusters)
-    kmeans.fit(image_sizes)
-
-    # Get the cluster labels for each image
-    labels = kmeans.labels_
-
-    # Group images by cluster label
-    clusters = {}
-    for i, label in enumerate(labels):
-        if label not in clusters:
-            clusters[label] = []
-        clusters[label].append(filenames[i])
-
-    return clusters
-
-
 def load_images(image_files, dir, scale, n_processes, dtype):
     """
-    Load images into an array, sorted by name.
-    As the image name corresponds to its ID, the index of the returned array corresponds to the image ID - 1.
+    Load images in a directoy, with optional scaling using multiprocessing
     """
 
     # List all files in the directory
@@ -276,12 +167,13 @@ def get_all_filters(images, model):
     return image_filters
 
 def cropsize(size, factor):
+    """Calculate final size of an image given a cropping factor"""
     crop_amount = int(factor * size)
 
     return size - crop_amount*2
 
-
 def find_best_scale(D_smallest, D_largest, D_min=300, block=6):
+    """Calculate ideal scale and output block to use depending on input image resolution"""
 
     D_max = 800
     end_block = 4
@@ -305,14 +197,56 @@ def find_best_scale(D_smallest, D_largest, D_min=300, block=6):
             if block > end_block:
                 while True:
                     block -= 1
-                    if block not in skip_blocks:
+                    if block not in skip_blocks or block == end_block:
                         break
             else:
                 scale = D_min / D_smallest
 
     return scale, block
 
+def cluster_images_by_size(dir, n_clusters=5):
+    """
+    Cluster image by size using K means clustering
+    """
+    image_sizes = []
+    filenames = []
+
+    # Iterate over files in the directory
+    for image_file in os.listdir(dir):
+        img_path = os.path.join(dir, image_file)
+
+        # Open the image using PIL
+        with Image.open(img_path) as img:
+            # Get the dimensions of the image
+            width, height = img.size
+            # image_sizes.append([width, height])
+            if width < height:
+                image_sizes.append([width])
+            else:
+                image_sizes.append([height])
+
+            filenames.append(image_file)
+
+    # Perform k-means clustering
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(image_sizes)
+
+    # Get the cluster labels for each image
+    labels = kmeans.labels_
+
+    # Group images by cluster label
+    clusters = {}
+    for i, label in enumerate(labels):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(filenames[i])
+
+    return clusters
+
 def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05):
+    """
+    Minimize the number of clusters given a tolerance
+    """
 
     def is_within_range(num, float_list, tolerance=tolerance):
         for index, float_num in enumerate(float_list):
@@ -324,7 +258,7 @@ def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05)
     blocks = []
     minimized_groups = []
 
-    largest_shoe = biggest_img(shoe_files, shoe_dir)[1]
+    largest_shoe = largest_img(shoe_files, shoe_dir)[1]
     smallest_shoe = smallest_img(shoe_files, shoe_dir)[1]
 
     for cluster in clusters.items():
@@ -336,7 +270,7 @@ def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05)
         else:
             smallest = smallest_shoe
 
-        largest_print = biggest_img(cluster, print_dir)[1]
+        largest_print = largest_img(cluster, print_dir)[1]
         if max(largest_print) > max(largest_shoe):
             largest = largest_print
         else:
@@ -365,13 +299,9 @@ def minimize_clusters(clusters, print_dir, shoe_files, shoe_dir, tolerance=0.05)
 
     return scales, blocks, minimized_groups
 
-
 def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], search_scales=[]):
     """
-    Load all required state for testing.
-    Loads:
-     - Convolutional filters for print and shoe images
-     - A dictionary containing the matching pairs of prints and shoes
+    Orchestrate full test
     """
 
     # Directories containing images
@@ -388,28 +318,22 @@ def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], search
 
     scales, blocks, minimized_cluster = minimize_clusters(clustered, print_dir, shoe_files, shoe_dir)
 
-    # model = Model("EfficientNet_B5", 7)
-    # model = Model("VGG19", 36)
-    # model = Model()
-    # model = Model("EfficientNetV2_M", 4)
-    # model = Model("EfficientNetV2_S", 7)
-    # model = Model("EfficientNetV2_M", 6)
-    # model = Model("EfficientNetV2_M", 1)
-    # model = Model("VGG16", 23)
-
     ranks = []
 
     # clustered = group_floats(clustered)
 
     print(f"{len(minimized_cluster)} groups found")
 
-    for scale, block, cluster in zip(scales, blocks, minimized_cluster):
+    # Reverse as this makes it smallest first, if there is going to be a problem I want it to happen at the beginning
+    for scale, block, cluster in reversed(list(zip(scales, blocks, minimized_cluster))):
 
         print(f"Cluster has {len(cluster)} items")
 
         # model = Model("EfficientNetV2_M", block)
-        model = Model()
-        scale = 0.1
+        model = Model("EfficientNetV2_M", 6)
+        # model = Model()
+        # scale = 0.15
+        scale = 0.18
 
         print(f"Best cluster scale found to be {scale} on block {block}")
 
@@ -454,15 +378,18 @@ def orchestrate(data_dir, n_processes, dtype, device="cpu", rotations=[], search
         torch.cuda.empty_cache()
 
     return ranks
-    # return (print_filters, shoe_filters, matching_pairs)
 
 def write_csv(filename, rankings):
+    """Write results of test to CSV"""
     with open(f'Results/{filename}', 'w', newline='') as file:
         writer = csv.writer(file)
         for rank in rankings:
             writer.writerow([rank])
 
 def get_rank(similarities, matching_pairs, print_id):
+    """
+    Calculate rank of correctly matching shoemark
+    """
 
     # Sort similarities and then return the indexes in order of the sort
     # np.flip() is required as numpy sorts low -> high
@@ -478,6 +405,9 @@ def get_rank(similarities, matching_pairs, print_id):
     return rank
 
 def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, counter, queue, rotations, scales, device="cpu"):
+    """
+    Worker for multithreaded running of test
+    """
 
     for i in range(len(shoe_filters)):
         if type(shoe_filters[i]) != np.ndarray:
@@ -543,11 +473,6 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
     for rotated_prints in rotated_prints_arr:
 
         for print_id, print_ in zip(range(*print_ids), rotated_prints):
-            # TODO remove this to simulate IRL
-            # if rankings[print_id] < 10 and rankings[print_id] != 0:
-            #     with counter.get_lock():
-            #         counter.value += 1
-            #     continue
 
             similarities = []
             for shoe in shoe_filters:
@@ -559,17 +484,6 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
 
                 similarities.append(sim)
 
-            # rank = get_rank(similarities, matching_pairs, print_id)
-
-            # if rank < rankings[print_id] or rankings[print_id] == 0:
-            #     extra = ""
-            #     if rankings[print_id] != 0:
-            #         extra = f", increased from previous rank {rankings[print_id]}"
-
-            #     rankings[print_id] = rank
-
-            #     queue.put(f"Print {print_id+1} true match ranked {rank}{extra}")
-
             print_index = print_id - print_ids[0]
             for shoe_id, similarity in enumerate(similarities):
                 if similarity > similarities_all[print_index, shoe_id]:
@@ -578,12 +492,6 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
             with counter.get_lock():
                 counter.value += 1
 
-        # sorted =  np.flip(np.argsort(max_similarities))
-
-        # extra = ""
-        # if max_rank != 1:
-        #     extra = f" (incorrectly matched shoe {sorted[0] + 1}, correct is {matching_pairs[print_id+1]})"
-
     for print_id, similarities in zip(range(*print_ids), similarities_all):
 
         rank = get_rank(similarities, matching_pairs, print_id)
@@ -591,10 +499,7 @@ def worker(print_filters, shoe_filters, print_ids, matching_pairs, rankings, cou
         # queue.put(f"Print {print_id+1} true match ranked {rank}, with similarity {similarities[print_id]}")
         queue.put(f"Print {print_id} true match ranked {rank}")
 
-
-
-
-def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, rotations=[-9, -3, 3, 9], scales=[0.96, 1.04]):
+def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_processes=32, rotations=[-15, -9, -3, 3, 9, 15, 180], scales=[1.02, 1.04, 1.08]):
     """
     Compare each print to every shoe, generating a probability score.
     The scores are used to calculate the ranking of the true match between a print and shoe in comparison to the other shoes.
@@ -603,7 +508,10 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
     # Thread spawning to allow GPU access
     if device == "gpu":
-       set_start_method('spawn', force=True)
+        # GPU implementation never worked
+        print("GPU implementation was never finished, please use CPU")
+        exit()
+        set_start_method('spawn', force=True)
 
     if type(print_filters[0]) == torch.Tensor:
         for i in range(len(print_filters)):
@@ -658,9 +566,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
         p.start()
 
     # Update tqdm progress bar with values in queue and counter
-    work = (len(rotations)+1) * (len(scales)+1) * n_prints #* 2
-    # work = (len(rotations) + len(scales) + 1 + 1) * n_prints
-    # work = (len(rotations) + len(scales) + 1) * n_prints
+    work = (len(rotations)+1) * (len(scales)+1) * n_prints
     with tqdm(total=work) as pbar:
         while counter.value < work: #pyright: ignore
             while not queue.empty():
@@ -689,8 +595,7 @@ def compare(print_filters, shoe_filters, matching_pairs, device="cpu", n_process
 
 # ------ Example Usage ------
 
-# print_filters, shoe_filters, matching_pairs = initialise_data("../Data/FID-300")
-
-# rankings = compare(print_filters, shoe_filters, matching_pairs, device="cpu")
-
-# write_csv('results.csv', rankings)
+# from main import *
+#
+# rankings = orchestrate("../Datasets/Impress/", 60, "impress", rotations=[-15, -9, -3, 3, 9, 15, 180], search_scales=[1.02, 1.04, 1.08], device="cpu")
+# cmp_all(rankings, total_references=300, total_prints=2292)
