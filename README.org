@@ -1,0 +1,19 @@
+#+title: Shoeprint Image Retrieval
+
+* Datasets
+
+The download link for the processed WVU2019 dataset and the shell script for processing the Impress dataset can be found in the =Datasets= directory.
+
+* Code
+
+The tests can be run as such:
+
+#+begin_src python
+from main import *
+
+rankings = orchestrate("../Datasets/Impress/", 60, "impress", rotations=[-15, -9, -3, 3, 9, 15, 180], search_scales=[1.02, 1.04, 1.08], device="cpu")
+cmp_all(rankings, total_references=300, total_prints=2292)
+#+end_src
+
+The orchestrate function can load datasets as ~impress~, ~WVU2019~ or ~FID-300~.
+The specified directory should contain =Query= and =Gallery= directories.
