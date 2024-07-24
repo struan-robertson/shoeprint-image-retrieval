@@ -1,0 +1,18 @@
+[project]
+name = "shoeprint-image-retrieval"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pillow",
+    "scikit-learn",
+    "tqdm",
+    "torchvision==0.14.1+rocm5.2",
+    "torch==1.13.1+rocm5.2",
+    "numpy<2",
+    "opencv-python",
+]
+
+[tool.uv]
+dev-dependencies = []
