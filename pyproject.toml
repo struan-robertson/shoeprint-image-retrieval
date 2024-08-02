@@ -2,7 +2,7 @@
 name = "shoeprint-image-retrieval"
 version = "0.1.0"
 description = "Add your description here"
-readme = "README.md"
+# readme = "README.org" (org files currently cause an error with uv)
 requires-python = ">=3.10"
 dependencies = [
     "pillow",
@@ -16,3 +16,9 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = []
+
+[tool.uv.pip]
+extra-index-url = ["https://download.pytorch.org/whl/rocm5.2"]
+
+
+

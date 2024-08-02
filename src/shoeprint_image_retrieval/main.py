@@ -1,37 +1,27 @@
-"""Main file for testing shoeprint image retrieval."""
-
 import csv
 import os
 import time
-
-# CPU
 from multiprocessing import Array, Manager, Process, Queue, Value, set_start_method
+from pathlib import Path
 
 import numpy as np
-
-# GPU
 import torch
 from PIL import Image
-from sklearn.cluster import KMeans  # type: ignore
+from sklearn.cluster import KMeans
 from tqdm import tqdm
 
-from Networks.network_pt import Model
-from parse_results import cmp_all
-from Similarities.ncc import get_similarity
-from utils import (
-    avg_img_size,
-    largest_img,
-    largest_img_dir,
-    move_small_img,
+from .ncc import get_similarity
+from .network import Model
+from .utils import (
+    largest_img,  # TODO add utils to Dataloader class and remove utils.py
     smallest_img,
-    smallest_img_dir,
 )
 
 np.seterr(divide="ignore", invalid="ignore")
 
-# TODO make dataset/dataloader class
-# It can store crop values, scale, numbers of images etc
 
+# TODO: make dataset/dataloader class
+# It can store crop values, scale, numbers of images etc
 def image_load_worker(
     image_files,
     scale,
@@ -59,8 +49,8 @@ def image_load_worker(
         img_array = np.array(img_resized)
 
         # Note that this is in all dimensions
-        # FIXME this obviously affects the minimum resolution logic
-        # TODO this should be defined based on the data type 
+        # FIXME: this obviously affects the minimum resolution logic
+        # TODO: this should be defined based on the data type
         # crop_width = int(0.15 * new_width)
         # crop_height = int(0.05 * new_height)
 
@@ -71,11 +61,11 @@ def image_load_worker(
         # FID-300
         crop_width = 0
         crop_height = 0
-        
+
         img_array = img_array[
             crop_height : new_height - crop_height, crop_width : new_width - crop_width
         ]
-                
+
         images.append(img_array)
 
         if type == "impress":
@@ -91,6 +81,8 @@ def image_load_worker(
     image_list[indexes[0] : indexes[1]] = images
     id_list[indexes[0] : indexes[1]] = ids
 
+
+# TODO incorporate into dataloader class
 def load_images(image_files, dir, scale, n_processes, dtype):
     """Load images in a directory, with optional scaling using multiprocessing."""
     # List all files in the directory
@@ -153,6 +145,7 @@ def load_images(image_files, dir, scale, n_processes, dtype):
     return images, ids
 
 
+# TODO incorporate into dataloader class
 def get_all_filters(images, model):
     """
     Calculate the convolutional filters for each image in a list, returning a list of the corresponding filters.
@@ -182,7 +175,7 @@ def find_best_scale(D_smallest, D_largest, D_min=300, block=6):
     D_max = 800
     end_block = 4
     skip_blocks = [5]
-    
+
     if D_smallest >= D_min and D_largest <= D_max:
         scale = 1
     elif D_smallest < D_min:
@@ -660,5 +653,5 @@ def compare(
 
 # from main import *
 #
-# rankings = orchestrate("../Datasets/Impress/", 60, "impress", rotations=[-15, -9, -3, 3, 9, 15, 180], search_scales=[1.02, 1.04, 1.08], device="cpu")
+# rankings = orchestrate("/home/struan/Vault/University/Doctorate/Data/FID-300", 32, "FID-300", rotations=[-15, -9, -3, 3, 9, 15, 180], search_scales=[1.02, 1.04, 1.08], device="cpu")
 # cmp_all(rankings, total_references=300, total_prints=2292)
