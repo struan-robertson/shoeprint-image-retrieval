@@ -1,7 +1,6 @@
 """Handle loading, processing and manipulation of datasets."""
 
 import os
-from pathlib import Path
 
 from PIL import Image
 from sklearn.cluster import KMeans
@@ -13,9 +12,9 @@ class Dataloader:
     def __init__(
         self,
         dataset_dir,
-        dataset_type,
-        n_processes,
         crop,
+        n_processes,
+        dataset_type,
         n_clusters=10,
     ):
         """Load and pre-process dataset."""
@@ -32,19 +31,53 @@ class Dataloader:
         )
 
         self.crop = crop
+        self.n_processes = n_processes
+        self.dataset_type = dataset_type
 
         clustered = self._cluster_images_by_size(self.shoemark_dir, n_clusters)
 
-        scales, blocks, minimised_clusters = self._minimise_clusters(
+        self.scales, self.blocks, self.clusters = self._minimise_clusters(
             clustered,
-            self.shoemark_dir,
-            self.shoeprint_files,
-            self.shoeprint_dir,
+            0.05,  # TODO make tolerance a setting
         )
 
-        print(f"{len(minimised_clusters)} clusters of image sizes found.")
+        self.num_clusters = len(self.clusters)
 
-        ranks = []
+        self._current_cluster = 0
+
+        # TODO take this outside of the class
+        print(f"{self.num_clusters} clusters of image sizes found.")
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._current_cluster >= self.num_clusters:
+            raise StopIteration
+        else:
+            # Going to return tuple of shoemark image, shoeprint_images, block,
+            # matching_pairs
+
+            self._current_cluster += 1
+
+            return result
+
+    def _load_images(self, image_files, image_directory, scale):
+        """Load images in a directory, using multiprocessing for post-processing."""
+        # TODO add more descriptive docstring
+        # Sort by name
+        image_files.sort()
+
+        chunk_size = len(image_files) // self.n_processes
+        chunk_extra = len(image_files) % self.n_processes
+        chunks = []
+        indexes = []
+        start = 0
+        for _ in range(self.n_processes):
+            end = start + chunk_size + (1 if chunk_extra > 1 else 0)
+            chunks.append(image_files[start:end])
+            indexes.append((start, end))
+            start = end
 
     def _cluster_images_by_size(self, image_dir, n_clusters):
         """Cluster images by size using K means clustering.
@@ -207,7 +240,10 @@ class Dataloader:
                         break
                 minimum_dim /= 2
                 scale, block = self._find_best_scale(
-                    smallest_dim, largest_dim, minimum_dim, block
+                    smallest_dim,
+                    largest_dim,
+                    minimum_dim,
+                    block,
                 )
             else:
                 scale = 1
@@ -235,7 +271,18 @@ class Dataloader:
         image_files,
         image_directory,
     ):
-        """Return the largest image given a list of files in a directory."""
+        """Return the largest image given a list of files in a directory.
+
+        Args:
+        ----
+            image_files (list): Names of image files.
+            image_directory (Path): Path to the directory image_files are contained in.
+
+        Returns:
+        -------
+            (largest_image_name, (width, height)), (smallest_image_name (width,height))
+
+        """
         largest_image_size = float(0)
         largest_image_name = None
         largest_image_dims = (0, 0)

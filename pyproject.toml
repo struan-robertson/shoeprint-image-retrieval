@@ -15,7 +15,9 @@ dependencies = [
 ]
 
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = [
+    "ipython",
+]
 
 [tool.uv.pip]
 extra-index-url = ["https://download.pytorch.org/whl/rocm5.2"]

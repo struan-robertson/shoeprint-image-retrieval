@@ -20,6 +20,6 @@
 			   )))))
      (indent-tabs-mode . nil)))
  (nil
-  . ((python-shell-interpreter . "~/Development/Doctorate/shoeprint-image-retrieval/.venv/bin/python")
+  . (;; (python-shell-interpreter . "~/Development/Doctorate/shoeprint-image-retrieval/.venv/bin/python")
      (python-shell-virtualenv-root . "~/Development/Doctorate/shoeprint-image-retrieval/.venv/")
      (python-shell-process-environment . '("HSA_OVERRIDE_GFX_VERSION=10.3.0")))))
