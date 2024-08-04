@@ -1,7 +1,11 @@
 """Handle loading, processing and manipulation of datasets."""
 
+import csv
 import os
+from multiprocessing import Manager, Process, Value
 
+import numpy as np
+import Path
 from PIL import Image
 from sklearn.cluster import KMeans
 
@@ -18,6 +22,7 @@ class Dataloader:
         n_clusters=10,
     ):
         """Load and pre-process dataset."""
+        self.dataset_dir = dataset_dir
         self.shoeprint_dir = dataset_dir / "Gallery"
         self.shoemark_dir = dataset_dir / "Query"
 
@@ -54,13 +59,43 @@ class Dataloader:
     def __next__(self):
         if self._current_cluster >= self.num_clusters:
             raise StopIteration
+
+        # Going to return tuple of shoemark image, shoeprint_images, block,
+        # matching_pairs
+
+        shoemark_images, shoemark_ids = self._load_images(
+            self.clusters[self._current_cluster],
+            self.shoemark_dir,
+            self.scales[self._current_cluster],
+        )
+
+        shoeprint_images, shoeprint_ids = self._load_images(
+            self.shoeprint_files,
+            self.shoeprint_dir,
+            self.scales[self._current_cluster],
+        )
+
+        # Get matching pairs
+        # Note that there is a many to one relationship between query shoemark
+        # and gallery shoeprint in WVU2019
+        # Get index of corresponding shoeprint from the index of a shoemark
+        matching_pairs = []
+        if self.dataset_type != "FID-300":
+            matching_pairs = [
+                shoeprint_ids.index(shoemark_id) for shoemark_id in shoemark_ids
+            ]
         else:
-            # Going to return tuple of shoemark image, shoeprint_images, block,
-            # matching_pairs
+            csv_vals = {}
+            with Path.open(self.dataset_dir / "label_table.csv") as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    csv_vals[int(row[0])] = int(row[1])
 
-            self._current_cluster += 1
+            matching_pairs = [csv_vals[shoemark_id] - 1 for shoemark_id in shoemark_ids]
 
-            return result
+        self._current_cluster += 1
+
+        return shoemark_images, shoeprint_images, matching_pairs
 
     def _load_images(self, image_files, image_directory, scale):
         """Load images in a directory, using multiprocessing for post-processing."""
@@ -78,6 +113,100 @@ class Dataloader:
             chunks.append(image_files[start:end])
             indexes.append((start, end))
             start = end
+
+        # Load all images into list
+        manager = Manager()
+        images = manager.list(range(len(image_files)))
+        ids = manager.list(range(len(image_files)))
+
+        counter = Value("i", 0)
+
+        processes = []
+        for i in range(self.n_processes):
+            p = Process(
+                target=Dataloader._image_load_worker,
+                args=(
+                    chunks[i],
+                    scale,
+                    image_directory,
+                    indexes[i],
+                    images,
+                    ids,
+                    counter,
+                    self.dataset_type,
+                    self.crop,
+                ),
+            )
+            processes.append(p)
+            p.start()
+
+        with p in processes:
+            p.join()
+
+        # images is list of image files _in order of name_
+        # important that gallery images are stored in the array correctly
+        # ids contains the id of said image
+
+        # Fix super strange bug where final item in image array is the int 160?
+        for i in images:
+            if type(i) is not np.ndarray:
+                images = images[:-1]
+
+        return images, ids
+
+    @staticmethod
+    def _image_load_worker(
+        # TODO some of these should be passed in a settings dictionary
+        # TODO add descriptive docstring
+        image_files,
+        scale,
+        image_directory,
+        indexes,
+        image_list,
+        id_list,
+        dataset_type,
+        crop,
+    ):
+        images = []
+        ids = []
+
+        for image_file in image_files:
+            image_path = image_directory / image_file
+
+            image = Image.open(image_path)
+
+            # Resize the image
+            new_width = int(image.width * scale)
+            new_height = int(image.height * scale)
+
+            image_resized = image.resize(
+                (new_width, new_height),
+                Image.Resampling.LANCZOS,
+            )
+
+            # Crop image
+            image_array = np.array(image_resized)
+
+            image_array = image_array[
+                crop[0] : new_height - crop[0],
+                crop[1] : new_width - crop[1],
+            ]
+
+            images.append(image_array)
+
+            # Parse image ID from filename
+            if dataset_type == "impress":
+                ids.append(int(image_file.split("_")[0].split(".")[0]))
+            elif dataset_type == "WVU2019":
+                ids.append(int(image_file[:3]))
+            elif dataset_type == "FID-300":
+                ids.append(int(image_file[:-4]))
+            else:
+                error = f"Dataset type {dataset_type} not implemented."
+                raise NotImplementedError(error)
+
+        image_list[indexes[0] : indexes[1]] = images
+        id_list[indexes[0] : indexes[1]] = ids
 
     def _cluster_images_by_size(self, image_dir, n_clusters):
         """Cluster images by size using K means clustering.
