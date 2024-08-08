@@ -17,6 +17,8 @@ dependencies = [
 [tool.uv]
 dev-dependencies = [
     "ipython",
+    "ipykernel",
+    "matplotlib",
 ]
 
 [tool.uv.pip]
