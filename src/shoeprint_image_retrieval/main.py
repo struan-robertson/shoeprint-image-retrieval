@@ -19,69 +19,6 @@ from .utils import (
 
 np.seterr(divide="ignore", invalid="ignore")
 
-
-# TODO: make dataset/dataloader class
-# It can store crop values, scale, numbers of images etc
-def image_load_worker(
-    image_files,
-    scale,
-    dir,
-    indexes,
-    image_list,
-    id_list,
-    counter,
-    type="impress",
-):
-    """Worker for multi_threaded loading of images."""
-    images = []
-    ids = []
-
-    for image_file in image_files:
-        img_path = os.path.join(dir, image_file)
-
-        img = Image.open(img_path)  # Convert to grayscale
-
-        # Resize the image
-        new_width = int(img.width * scale)  # 0.1
-        new_height = int(img.height * scale)
-
-        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        img_array = np.array(img_resized)
-
-        # Note that this is in all dimensions
-        # FIXME: this obviously affects the minimum resolution logic
-        # TODO: this should be defined based on the data type
-        # crop_width = int(0.15 * new_width)
-        # crop_height = int(0.05 * new_height)
-
-        # Impress
-        # crop_width = int(0.2 * new_width)
-        # crop_height = int(0.1 * new_height)
-
-        # FID-300
-        crop_width = 0
-        crop_height = 0
-
-        img_array = img_array[
-            crop_height : new_height - crop_height, crop_width : new_width - crop_width
-        ]
-
-        images.append(img_array)
-
-        if type == "impress":
-            ids.append(int(image_file.split("_")[0].split(".")[0]))
-        elif type == "WVU2019":
-            ids.append(int(image_file[:3]))
-        elif type == "FID-300":
-            ids.append(int(image_file[:-4]))
-
-        # with counter.get_lock():
-        #     counter.value += 1
-
-    image_list[indexes[0] : indexes[1]] = images
-    id_list[indexes[0] : indexes[1]] = ids
-
-
 # TODO incorporate into dataloader class
 def load_images(image_files, dir, scale, n_processes, dtype):
     """Load images in a directory, with optional scaling using multiprocessing."""
