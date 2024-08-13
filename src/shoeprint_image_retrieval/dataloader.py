@@ -2,7 +2,7 @@
 
 import csv
 import os
-from multiprocessing import Manager, Process, Value
+from multiprocessing import Manager, Process
 from pathlib import Path
 
 import numpy as np
@@ -144,7 +144,7 @@ class Dataloader:
             matching_pairs = [csv_vals[shoemark_id] - 1 for shoemark_id in shoemark_ids]
 
         block = self.blocks[self._current_cluster]
-            
+
         self._current_cluster += 1
 
         return shoemark_images, shoeprint_images, matching_pairs, block
