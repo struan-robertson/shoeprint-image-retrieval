@@ -1,0 +1,25 @@
+# Settings for running shoeprint image retrieval
+
+[dataset]
+dir = "./datasets/Data/FID-300" # Needs to contain Gallery (shoeprint) and Query (shoemark) directories
+type = "FID-300" # FID-300, Impress or WVU2019 
+crop = [0,0] # Amount (in pixels) to crop each image
+# For some reason having this too high was causing strange errors, probably a race condition somewhere
+n_processes = 16
+n_clusters = 10 # Number of clusters for grouping shoemark images by size
+cluster_minimise_tolerance = 0.05 # If the selected scale between two clusters is <= this, merge
+
+[model]
+type = "EfficientNetV2_M" # Look at network.py to see available options
+clahe_clip_limit = 2.0
+clahe_tile_grid_size = [8,8]
+start_block = 6 # Block of network to ideally use if input image size allows for it
+end_block = 4 # Don't use any earlier blocks
+skip_blocks = [5] # Blocks between start_block and end_block which do not change resolution
+minimum_dim = 300 # Minimum dimension for accurate feature map output at start_block
+maximum_dim = 800 # Maximum dimension before scaling is applied
+
+[comparison]
+n_processes = 30 # Number of processes to use for feature map comparisons
+rotations = "" # Either list of rotations (in degrees) to apply to shoemarks or "" for None
+scales = "" # Either list of scales to apply to shoemarks or "" for None

@@ -7,3 +7,5 @@
 /.direnv/
 *.npy
 *.egg-info/
+*.egg-info/
+*.egg-info/

@@ -8,25 +8,60 @@ dependencies = [
     "pillow",
     "scikit-learn",
     "tqdm",
-    "torchvision==0.14.1",
-    "torch==1.13.1",
+    "torchvision==0.14.1+rocm5.2",
+    "torch==1.13.1+rocm5.2",
     "numpy<2",
     "opencv-python",
+    "more-itertools",
+    "types-tqdm",
+    "torchinfo",
+    "toml",
 ]
+
+[tool.basedpyright]
+include = [ "src" ]
+exclude = [ ".venv" ]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+pythonPlatform = "Linux"
+reportMissingImports = "error"
+reportMissingTypeStubs = false
+
+[tool.ruff]
+target-version = "py310"
+respect-gitignore = true
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = [ "ALL" ]
+extend-ignore = [
+  "ANN",  # Type hinting, leave for basedpyright
+  "FIX",  # Leave fixme for emacs
+  "TD" ,  # Same with todo
+  "T201", # print functions are fine
+  "F821", # Both Pyright and ruff detect this
+  "F722", # Incorrectly throwing errors with forward type annotations
+  "F401", # Pyright conflict
+  "B006", # Pyright conflict
+  "PLR2004", # Using constant values in if statements is a common pattern for me
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.uv]
 dev-dependencies = [
     "ipython",
     "ipykernel",
     "matplotlib",
-    "python-lsp-server>=1.11.0",
-    "python-lsp-ruff>=2.2.2",
+    "basedpyright",
 ]
 python-preference = "only-managed"
 python-fetch = "automatic"
 
 [tool.uv.pip]
-extra-index-url = ["https://download.pytorch.org/whl/cu121"]
+extra-index-url = ["https://download.pytorch.org/whl/rocm5.2"]
 
 
 

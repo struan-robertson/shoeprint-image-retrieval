@@ -26,7 +26,12 @@ class Dataloader:
     """Initialise, pre-process and provide access to datasets."""
 
     def __init__(self, config: Config) -> None:
-        """Load and pre-process dataset."""
+        """Load and pre-process dataset.
+
+        Args:
+            config: Config for system.
+
+        """
         self.config = config
 
         self.dataset_dir = Path(config["dataset"]["dir"])

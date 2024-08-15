@@ -9,6 +9,7 @@ from torchvision.models.vgg import cast
 from torchvision.transforms.functional import Any
 from tqdm import tqdm
 
+from .config import Config
 from .customtypes import FeatureMapsArrayType, ImageArrayType
 
 
@@ -91,26 +92,30 @@ class Model:
 
     def __init__(  # noqa: C901, PLR0912, PLR0915
         self,
-        model_str: str = "VGG19",
-        layers: int = 23,
-        clip_limit: float = 2.0,
-        tile_grid_size: tuple[int, int] = (8, 8),
+        config: Config,
+        block: int,
     ) -> None:
         """Initialise a model and associated function.
 
         Args:
-            model_str: The name of the model.
-            layers: The number of model layers to use.
-            clip_limit: The clip limit for the CLAHE.
-            tile_grid_size: The tile grid size for the CLAHE.
+            config: Config for system.
+            block: Network block to use as output.
+
         """
+        self.config = config
+
         # CLAHE
-        self.clahe: cv2.CLAHE = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+        self.clahe: cv2.CLAHE = cv2.createCLAHE(
+            clipLimit=config["model"]["clahe_clip_limit"],
+            tileGridSize=config["model"]["clahe_tile_grid_size"],
+        )
 
         # TorchVision pre-trained network pre-processing parameters
 
         # Check if a GPU is available and if not, use the CPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        model_str = config["model"]["type"]
 
         # Select model from model string
         if model_str == "VGG19":
@@ -177,7 +182,7 @@ class Model:
             raise LookupError(e)
 
         # Get specified model layers
-        model = list(model.features.children())[:layers]
+        model = list(model.features.children())[:block]
         model = nn.Sequential(*model)
 
         # Create model
