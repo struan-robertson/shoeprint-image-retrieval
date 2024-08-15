@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import floor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -213,6 +214,19 @@ class Dataloader:
 
             image = Image.open(image_path)
 
+            # Crop the image
+            crop_height = floor(image.height * crop[0])
+            crop_width = floor(image.width * crop[1])
+
+            crop_box = (
+                crop_width,
+                crop_height,
+                image.width - crop_width,
+                image.height - crop_height,
+            )
+
+            image = image.crop(crop_box)
+
             # Resize the image
             new_width = int(image.width * scale)
             new_height = int(image.height * scale)
@@ -224,11 +238,6 @@ class Dataloader:
 
             # Crop image
             image_array = np.array(image_resized)
-
-            image_array = image_array[
-                crop[0] : new_height - crop[0],
-                crop[1] : new_width - crop[1],
-            ]
 
             images.append(image_array)
 
@@ -434,7 +443,14 @@ class Dataloader:
             image_path = image_directory / image_file
 
             with Image.open(image_path) as image:
-                width, height = image.size
+                height, width = image.size
+
+                # Take into account cropping
+                crop_height = floor(height * self.config["dataset"]["crop"][0] * 2)
+                crop_width = floor(width * self.config["dataset"]["crop"][1] * 2)
+
+                height -= crop_height
+                width -= crop_width
 
                 largest_dim = max(width, height)
                 smallest_dim = min(width, height)

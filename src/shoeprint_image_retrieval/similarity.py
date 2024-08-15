@@ -230,7 +230,7 @@ def compare_maps(
 # TODO test this actually works lol
 def _apply_transformations(
     all_shoemark_maps: list[list[FeatureMapsArrayType]],
-    transformations: list[float],
+    transformations: list[float] | list[int],
     original_shoemark_maps: list[FeatureMapsArrayType],
     transformation_type: Literal["rotate", "scale"],
 ) -> list[list[FeatureMapsArrayType]]:
@@ -291,7 +291,7 @@ def _comparison_worker(  # noqa: C901, PLR0913
     shoemark_ids: tuple[int, int],
     matching_pairs: list[int],
     trackers: MultiProcessingTrackers,
-    rotations: list[float] | None,
+    rotations: list[int] | None,
     scales: list[float] | None,
 ) -> None:
     """Multiprocessing worker function to compare feature maps and rank results.

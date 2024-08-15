@@ -1,11 +1,11 @@
 # Settings for running shoeprint image retrieval
 
 [dataset]
-dir = "./datasets/Data/FID-300" # Needs to contain Gallery (shoeprint) and Query (shoemark) directories
-type = "FID-300" # FID-300, Impress or WVU2019 
-crop = [0,0] # Amount (in pixels) to crop each image
+dir = "./datasets/Data/Impress/Dataset/" # Needs to contain Gallery (shoeprint) and Query (shoemark) directories
+type = "Impress" # FID-300, Impress or WVU2019 
+crop = [0.1,0.2]# Amount (as a ratio out of 1, i.e. 20% = 0.2) to crop each height and width
 # For some reason having this too high was causing strange errors, probably a race condition somewhere
-n_processes = 16
+n_processes = 24
 n_clusters = 10 # Number of clusters for grouping shoemark images by size
 cluster_minimise_tolerance = 0.05 # If the selected scale between two clusters is <= this, merge
 
@@ -21,5 +21,5 @@ maximum_dim = 800 # Maximum dimension before scaling is applied
 
 [comparison]
 n_processes = 30 # Number of processes to use for feature map comparisons
-rotations = "" # Either list of rotations (in degrees) to apply to shoemarks or "" for None
-scales = "" # Either list of scales to apply to shoemarks or "" for None
+rotations =  [-15, -9, -3, 3, 9, 15, 180] # Either list of rotations (in degrees) to apply to shoemarks or "" for None
+scales = [1.02, 1.04, 1.08] # Either list of scales to apply to shoemarks or "" for None
