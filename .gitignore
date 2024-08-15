@@ -7,5 +7,5 @@
 /.direnv/
 *.npy
 *.egg-info/
-*.egg-info/
-*.egg-info/
+/src/*.egg-info/
+/src/shoeprint_image_retrieval.eigg-info/

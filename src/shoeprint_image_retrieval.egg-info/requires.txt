@@ -1,7 +1,0 @@
-pillow
-scikit-learn
-tqdm
-torchvision==0.14.1+rocm5.2
-torch==1.13.1+rocm5.2
-numpy<2
-opencv-python
