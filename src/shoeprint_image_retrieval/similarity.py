@@ -227,7 +227,6 @@ def compare_maps(
     )
 
 
-# TODO test this actually works lol
 def _apply_transformations(
     all_shoemark_maps: list[list[FeatureMapsArrayType]],
     transformations: list[float] | list[int],
