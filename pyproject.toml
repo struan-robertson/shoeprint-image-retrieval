@@ -58,10 +58,8 @@ dev-dependencies = [
     "basedpyright",
 ]
 python-preference = "only-managed"
-python-fetch = "automatic"
-
-[tool.uv.pip]
 extra-index-url = ["https://download.pytorch.org/whl/rocm5.2"]
+
 
 
 

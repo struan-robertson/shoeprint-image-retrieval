@@ -6,6 +6,6 @@ The download link for the processed WVU2019 dataset and the shell script for pro
 
 * Code
 
-After installing dependencies using the [[https://github.com/astral-sh/uv][uv]] package manager, you can run the code using the =run.py= file and specify settings in the =run.toml= file.
+After installing dependencies using the [[https://github.com/astral-sh/uv][uv]] package manager (run =uv sync in top level of project=), you can run the code using the =run.py= file and specify settings in the =run.toml= file.
 
 
